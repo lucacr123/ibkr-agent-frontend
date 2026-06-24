@@ -284,7 +284,11 @@ export default function IBKRAgent() {
                       { label: "Total Cash", val: fmtEUR(combined.totalCash) },
                       { label: "Stock Value", val: fmtEUR(combined.totalStockValue) },
                       { label: "Unrealized P&L", val: combined.totalUnrealizedPnlEUR, isPnl: true },
-                      { label: "Positions", val: combined.positionCount },
+                      { label: "Realized P&L", val: combined.totalRealizedPnlEUR, isPnl: true },
+                      { label: "YTD P&L", val: combined.totalYtdPnlEUR, isPnl: true },
+                      { label: "MTD P&L", val: combined.totalMtdPnlEUR, isPnl: true },
+                      { label: "Dividends", val: fmtEUR(combined.totalDividends) },
+                      { label: "Commissions", val: fmtEUR(combined.totalCommissions) },
                     ].map(s => (
                       <Card key={s.label} style={{ padding: "12px 14px" }}>
                         <Label>{s.label}</Label>
@@ -315,7 +319,8 @@ export default function IBKRAgent() {
                         </div>
                         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
                           <Mono style={{ fontSize: 14, fontWeight: 600 }}>{fmtEUR(p.totalValueEUR)}</Mono>
-                          <div style={{ marginTop: 4 }}><PnlText value={p.totalUnrealEUR} style={{ fontSize: 12 }} /></div>
+                          {p.totalUnrealEUR !== 0 && <div style={{ marginTop: 3 }}><PnlText value={p.totalUnrealEUR} style={{ fontSize: 12 }} /></div>}
+                          {p.totalYtdPnl !== 0 && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>YTD: <PnlText value={p.totalYtdPnl} style={{ fontSize: 11 }} /></div>}
                         </div>
                       </div>
                     </Card>
