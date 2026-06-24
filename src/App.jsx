@@ -368,6 +368,7 @@ export default function IBKRAgent() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 14 }}>
                     {[
                       { label: "Net Liquidation", val: fmtGBP(acct2.netLiquidation) },
+                      { label: "In EUR", val: fmtEUR(acct2.netLiquidationEUR) },
                       { label: "Cash", val: fmtGBP(acct2.cash) },
                       { label: "Stock Value", val: fmtGBP(acct2.stockValue) },
                       { label: "Commissions YTD", val: fmtGBP(acct2.commissions) },
