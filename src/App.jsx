@@ -215,20 +215,19 @@ function QuantChart({ symbol, metric, range, label }) {
   );
 }
 
-// Parse message content — split on [CHART:...] and [QUANT_CHART:...] tags
+// Parse message content — split on @@CHART:...@@ and @@QUANT:...@@ tags
 function MessageContent({ content }) {
   if (!content) return null;
-  // Match both tag types
-  const TAG_RE = /(\[CHART:[^\]]+\]|\[QUANT_CHART:[^\]]+\])/g;
+  const TAG_RE = /(@@(?:CHART|QUANT):[^@]+@@)/g;
   const parts = content.split(TAG_RE);
   return (
     <>
       {parts.map((part, i) => {
-        // Price chart
-        const cm = part.match(/^\[CHART:([^:]+):([^\]]+)\]$/);
+        // Price chart: @@CHART:SYMBOL:RANGE@@
+        const cm = part.match(/^@@CHART:([^:]+):([^@]+)@@$/);
         if (cm) return <InlineChart key={i} symbol={cm[1]} range={cm[2]} />;
-        // Quant chart: [QUANT_CHART:SYMBOL:METRIC:RANGE:LABEL]
-        const qm = part.match(/^\[QUANT_CHART:([^:]+):([^:]+):([^:]+):([^\]]+)\]$/);
+        // Quant chart: @@QUANT:SYMBOL:METRIC:RANGE:LABEL@@
+        const qm = part.match(/^@@QUANT:([^:]+):([^:]+):([^:]+):([^@]+)@@$/);
         if (qm) return <QuantChart key={i} symbol={qm[1]} metric={qm[2]} range={qm[3]} label={qm[4]} />;
         if (part) return <span key={i} style={{ whiteSpace: "pre-wrap" }}>{part}</span>;
         return null;
