@@ -241,21 +241,28 @@ function InlineChart({ symbol, range = "1y" }) {
 
 // ── Quant metric chart ───────────────────────────────────────────
 function QuantChart({ symbol, metric, range, label, data: propData = null }) {
-  const [data, setData] = useState(propData);
-  const [loading, setLoading] = useState(!propData);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (propData) { setData(propData); setLoading(false); return; }
+    if (propData) {
+      setData(propData);
+      setLoading(false);
+      return;
+    }
+    // Fallback: fetch from cache endpoint
     fetch(`${BACKEND}/api/analytics/${encodeURIComponent(symbol)}?range=${range}`)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [symbol, metric, range]);
+  }, [symbol, metric, range, propData]);
 
   if (loading) return <div style={{ padding: "10px 0", color: C.textMuted, fontSize: 12 }}>Loading {label}…</div>;
-  if (!data || !data[metric]) return null;
+  if (!data) return null;
+  // Series can be at top level (when passed directly) or nested
+  const series = data[metric];
+  if (!series) return null;
 
-  const series  = data[metric];
   const dates   = data.dates || [];
   const nonNull = series.filter(v => v !== null);
   if (!nonNull.length) return null;
@@ -896,19 +903,19 @@ export default function IBKRAgent() {
                   ))}
                 </div>
 
-                {/* Z-Score chart */}
-                <QuantChart symbol={sym} metric="priceZscore" range={rng} label="Z-Score — price vs 30d rolling mean" />
+                {/* Z-Score chart — pass data directly, no second fetch */}
+                <QuantChart symbol={sym} metric="priceZscore" range={rng} label="Z-Score — price vs 30d rolling mean" data={quantData} />
 
                 {/* Rolling Vol chart */}
-                <QuantChart symbol={sym} metric="rollingVol" range={rng} label="Rolling Volatility % (annualised, 30d)" />
+                <QuantChart symbol={sym} metric="rollingVol" range={rng} label="Rolling Vol % annualised (30d)" data={quantData} />
 
                 {/* Rolling Sharpe chart */}
-                <QuantChart symbol={sym} metric="rollingSharpe" range={rng} label="Rolling Sharpe Ratio (30d)" />
+                <QuantChart symbol={sym} metric="rollingSharpe" range={rng} label="Rolling Sharpe Ratio (30d)" data={quantData} />
 
                 {/* Drawdown chart */}
-                <QuantChart symbol={sym} metric="drawdownSeries" range={rng} label="Drawdown %" />
+                <QuantChart symbol={sym} metric="drawdownSeries" range={rng} label="Drawdown % from peak" data={quantData} />
 
-                {/* Rolling Beta vs SPX */}
+                {/* Rolling Beta vs SPX — fetches benchmark independently */}
                 <RollingBetaChart symbol={sym} range={rng} window={30} benchmark="^GSPC" />
               </>
             );
