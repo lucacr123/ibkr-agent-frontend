@@ -549,7 +549,7 @@ export default function App(){
                 <QuantPanel label="Rolling Volatility % ann. (30d)" series={quantData.rollingVol} dates={dates} color={C.blue} showZero={false} id="q_vol"/>
                 <QuantPanel label="Rolling Sharpe Ratio (30d)" series={quantData.rollingSharpe} dates={dates} showZero={true} id="q_sharpe"/>
                 <QuantPanel label="Drawdown % from peak" series={quantData.drawdownSeries} dates={dates} color={C.red} showZero={false} id="q_dd"/>
-                <BetaPanel symbol={chartSymbol} range={chartRange}/>
+                <QuantPanel label="Z-Score of Returns (30d rolling)" series={quantData.priceZscore30} dates={quantData.dates} color={C.blue} showZero={true} id="q_zscore30"/>
               </>
             );
           })()}
