@@ -534,7 +534,7 @@ export default function App(){
                 {/* Stats */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:7,marginBottom:4,marginTop:8}}>
                   {[
-                    {label:"Z-Score",val:s.currentPriceZscore?.toFixed(2),color:s.currentPriceZscore>2?C.red:s.currentPriceZscore<-2?C.green:C.gold},
+                    {label:"Z-Score (ret)",val:s.currentReturnZscore?.toFixed(3),color:s.currentReturnZscore>2?C.red:s.currentReturnZscore<-2?C.green:C.gold},
                     {label:"Ann. Vol",val:s.annualizedVol?s.annualizedVol.toFixed(1)+"%":"—",color:C.textPrimary},
                     {label:"Sharpe",val:s.sharpe?.toFixed(2),color:s.sharpe>1?C.green:s.sharpe<0?C.red:C.amber},
                     {label:"Max DD",val:s.maxDrawdown?s.maxDrawdown.toFixed(1)+"%":"—",color:C.red},
