@@ -152,15 +152,84 @@ function InlineChart({ symbol, range = "1y" }) {
   );
 }
 
-// Parse message content — split on [CHART:SYMBOL:RANGE] tags
+// ── Quant metric chart ───────────────────────────────────────────
+function QuantChart({ symbol, metric, range, label }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${BACKEND}/api/analytics/${encodeURIComponent(symbol)}?range=${range}`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [symbol, metric, range]);
+
+  if (loading) return <div style={{ padding: "10px 0", color: C.textMuted, fontSize: 12 }}>Loading {label}…</div>;
+  if (!data || !data[metric]) return <div style={{ color: C.red, fontSize: 12 }}>{label} not available</div>;
+
+  const series = data[metric].filter(v => v !== null);
+  const dates  = data.dates?.slice(-series.length) || [];
+  if (!series.length) return null;
+
+  const min = Math.min(...series), max = Math.max(...series), range_ = max - min || 1;
+  const w = 340, h = 120, pad = 6;
+  const isZero = v => Math.abs(v) < 0.001;
+
+  // Color: green if positive, red if negative, gold for z-score
+  const isZscore = metric.includes("Zscore") || metric.includes("zscore");
+  const lineCol  = isZscore ? C.gold : (series[series.length-1] >= 0 ? C.green : C.red);
+
+  const pts = series.map((v, i) => {
+    const x = (i / Math.max(series.length - 1, 1)) * w;
+    const y = h - ((v - min) / range_) * (h - pad * 2) - pad;
+    return `${x},${y}`;
+  }).join(" ");
+
+  const zeroY = h - ((0 - min) / range_) * (h - pad * 2) - pad;
+  const showZeroLine = min < 0 && max > 0;
+  const last = series[series.length - 1];
+  const lastCol = isZscore ? C.gold : last >= 0 ? C.green : C.red;
+
+  return (
+    <div style={{ marginTop: 10, background: C.surfaceHigh, borderRadius: 12, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{label}</div>
+        <Mono style={{ fontSize: 15, fontWeight: 700, color: lastCol }}>{last?.toFixed(3)}</Mono>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: h }} preserveAspectRatio="none">
+        {showZeroLine && <line x1="0" y1={zeroY} x2={w} y2={zeroY} stroke={C.border} strokeWidth="1" strokeDasharray="4,4" />}
+        <defs>
+          <linearGradient id={`grad_${metric}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={lineCol} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={lineCol} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polyline points={pts} fill="none" stroke={lineCol} strokeWidth="1.5" />
+        {!showZeroLine && <polygon points={`0,${h} ${pts} ${w},${h}`} fill={`url(#grad_${metric})`} />}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+        <div style={{ fontSize: 10, color: C.textDim }}>{dates[0]}</div>
+        <div style={{ fontSize: 10, color: C.textDim }}>{dates[dates.length-1]}</div>
+      </div>
+    </div>
+  );
+}
+
+// Parse message content — split on [CHART:...] and [QUANT_CHART:...] tags
 function MessageContent({ content }) {
   if (!content) return null;
-  const parts = content.split(/(\[CHART:[^\]]+\])/g);
+  // Match both tag types
+  const TAG_RE = /(\[CHART:[^\]]+\]|\[QUANT_CHART:[^\]]+\])/g;
+  const parts = content.split(TAG_RE);
   return (
     <>
       {parts.map((part, i) => {
-        const match = part.match(/^\[CHART:([^:]+):([^\]]+)\]$/);
-        if (match) return <InlineChart key={i} symbol={match[1]} range={match[2]} />;
+        // Price chart
+        const cm = part.match(/^\[CHART:([^:]+):([^\]]+)\]$/);
+        if (cm) return <InlineChart key={i} symbol={cm[1]} range={cm[2]} />;
+        // Quant chart: [QUANT_CHART:SYMBOL:METRIC:RANGE:LABEL]
+        const qm = part.match(/^\[QUANT_CHART:([^:]+):([^:]+):([^:]+):([^\]]+)\]$/);
+        if (qm) return <QuantChart key={i} symbol={qm[1]} metric={qm[2]} range={qm[3]} label={qm[4]} />;
         if (part) return <span key={i} style={{ whiteSpace: "pre-wrap" }}>{part}</span>;
         return null;
       })}
