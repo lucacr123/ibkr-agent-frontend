@@ -284,9 +284,8 @@ export default function IBKRAgent() {
                       { label: "Total Cash", val: fmtEUR(combined.totalCash) },
                       { label: "Stock Value", val: fmtEUR(combined.totalStockValue) },
                       { label: "Unrealized P&L", val: combined.totalUnrealizedPnlEUR, isPnl: true },
-                      { label: "Realized P&L", val: combined.totalRealizedPnlEUR, isPnl: true },
-                      { label: "YTD P&L", val: combined.totalYtdPnlEUR, isPnl: true },
-                      { label: "MTD P&L", val: combined.totalMtdPnlEUR, isPnl: true },
+                      { label: "1Y Gain", val: combined.totalYtdGainEUR, isPnl: true },
+                      { label: "1Y Return (TWR)", val: `${combined.avgYtdReturnPct > 0 ? "+" : ""}${combined.avgYtdReturnPct}%`, color: combined.avgYtdReturnPct >= 0 ? C.green : C.red },
                       { label: "Dividends", val: fmtEUR(combined.totalDividends) },
                       { label: "Commissions", val: fmtEUR(combined.totalCommissions) },
                     ].map(s => (
@@ -294,7 +293,7 @@ export default function IBKRAgent() {
                         <Label>{s.label}</Label>
                         {s.isPnl
                           ? <PnlText value={s.val} style={{ fontSize: 15 }} />
-                          : <Mono style={{ fontSize: 15, fontWeight: 700 }}>{s.val}</Mono>}
+                          : <Mono style={{ fontSize: 15, fontWeight: 700, color: s.color || C.textPrimary }}>{s.val}</Mono>}
                       </Card>
                     ))}
                   </div>
