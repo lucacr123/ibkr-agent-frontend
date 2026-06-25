@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 const C = {
   bg: "#0D0F14", surface: "#13161E", surfaceHigh: "#1A1E2A",
@@ -9,6 +9,13 @@ const C = {
 };
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+
+// Yahoo Finance symbol map for portfolio holdings
+const YF_SYMBOLS = {
+  CSPX: "CSPX.L", CSNDX: "CNDX.SW", CSSX5E: "CSSX5E.SW",
+  IEEM: "IEEM.L", IUSE: "IUSE.L", NQSE: "NQSE.DE",
+  VUAG: "VUAG.L", VWRL: "VWRL.L", VFEM: "VFEM.L",
+};
 
 function b64ToUint8(b) {
   const pad = "=".repeat((4 - b.length % 4) % 4);
@@ -22,6 +29,7 @@ const Card  = ({ children, style = {} }) => <div style={{ background: C.surface,
 
 function PnlText({ value, style = {} }) {
   const v = parseFloat(value || 0);
+  if (v === 0) return <Mono style={{ color: C.textMuted, ...style }}>—</Mono>;
   return <Mono style={{ color: v >= 0 ? C.green : C.red, fontWeight: 600, ...style }}>{v >= 0 ? "+" : ""}€{Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Mono>;
 }
 
@@ -33,11 +41,74 @@ function AllocationBar({ pct }) {
   );
 }
 
+// ── Mini line chart using SVG ─────────────────────────────────────
+function LineChart({ bars, color = C.gold, height = 120 }) {
+  if (!bars?.length) return null;
+  const closes = bars.map(b => b.close).filter(Boolean);
+  if (!closes.length) return null;
+  const min = Math.min(...closes);
+  const max = Math.max(...closes);
+  const range = max - min || 1;
+  const w = 340, h = height;
+  const pts = closes.map((c, i) => {
+    const x = (i / (closes.length - 1)) * w;
+    const y = h - ((c - min) / range) * (h - 10) - 2;
+    return `${x},${y}`;
+  }).join(" ");
+  const firstClose = closes[0], lastClose = closes[closes.length - 1];
+  const lineColor = lastClose >= firstClose ? C.green : C.red;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height }} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="1.5" />
+      <polygon points={`0,${h} ${pts} ${w},${h}`} fill="url(#grad)" />
+    </svg>
+  );
+}
+
+// ── Candlestick chart ─────────────────────────────────────────────
+function CandlestickChart({ bars, height = 200 }) {
+  if (!bars?.length) return null;
+  const recent = bars.slice(-60);
+  const highs  = recent.map(b => b.high).filter(Boolean);
+  const lows   = recent.map(b => b.low).filter(Boolean);
+  const min = Math.min(...lows), max = Math.max(...highs), range = max - min || 1;
+  const w = 340, h = height, pad = 4;
+  const candleW = Math.max(2, (w / recent.length) - 1.5);
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height }} preserveAspectRatio="none">
+      {recent.map((b, i) => {
+        if (!b.open || !b.close || !b.high || !b.low) return null;
+        const bull = b.close >= b.open;
+        const col  = bull ? C.green : C.red;
+        const x    = (i / recent.length) * w;
+        const yH   = h - ((b.high  - min) / range) * (h - pad * 2) - pad;
+        const yL   = h - ((b.low   - min) / range) * (h - pad * 2) - pad;
+        const yO   = h - ((b.open  - min) / range) * (h - pad * 2) - pad;
+        const yC   = h - ((b.close - min) / range) * (h - pad * 2) - pad;
+        const bodyT = Math.min(yO, yC), bodyH = Math.max(Math.abs(yC - yO), 1);
+        return (
+          <g key={i}>
+            <line x1={x + candleW / 2} y1={yH} x2={x + candleW / 2} y2={yL} stroke={col} strokeWidth="1" />
+            <rect x={x} y={bodyT} width={candleW} height={bodyH} fill={col} opacity="0.85" />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function IBKRAgent() {
   const [tab, setTab] = useState("chat");
   const [messages, setMessages] = useState([{
     role: "assistant",
-    content: "Connected to both your IBKR accounts (U11354150 EUR + U9733561 GBP). I can show your combined portfolio, allocation, P&L, and trade history across both. What would you like to know?"
+    content: "Connected to both IBKR accounts + live market data for any stock worldwide. I can show charts, quotes, portfolio analysis, P&L, and trade history. What would you like?"
   }]);
   const [input, setInput]   = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,54 +119,90 @@ export default function IBKRAgent() {
   const [runningTask, setRunningTask] = useState(null);
   const [pushStatus, setPushStatus]   = useState("idle");
   const [ibkrOk, setIbkrOk] = useState(null);
-  const [portfolioView, setPortfolioView] = useState("combined"); // combined | u1 | u2
+  const [portfolioView, setPortfolioView] = useState("combined");
+  // Charts
+  const [chartSymbol, setChartSymbol] = useState("");
+  const [chartInput, setChartInput]   = useState("");
+  const [chartRange, setChartRange]   = useState("1y");
+  const [chartType, setChartType]     = useState("line");
+  const [chartData, setChartData]     = useState(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [quotes, setQuotes]           = useState([]);
+  const [quotesLoading, setQuotesLoading] = useState(false);
+  // Portfolio performance chart
+  const [perfData, setPerfData]       = useState(null);
   const chatEndRef = useRef(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
   useEffect(() => {
-    loadPortfolio();
-    loadTasks();
-    loadLog();
-    checkStatus();
-    checkPush();
+    loadPortfolio(); loadTasks(); loadLog(); checkStatus(); checkPush();
   }, []);
 
   async function checkStatus() {
-    try {
-      const r = await fetch(`${BACKEND}/api/ibkr/status`);
-      const d = await r.json();
-      setIbkrOk(d.authenticated);
-    } catch { setIbkrOk(false); }
+    try { const r = await fetch(`${BACKEND}/api/ibkr/status`); const d = await r.json(); setIbkrOk(d.authenticated); } catch { setIbkrOk(false); }
   }
-
   async function loadPortfolio() {
     setPortLoading(true);
-    try {
-      const r = await fetch(`${BACKEND}/api/account`);
-      setPortfolio(await r.json());
-    } catch (e) { console.error(e); }
+    try { const r = await fetch(`${BACKEND}/api/account`); setPortfolio(await r.json()); } catch {}
     setPortLoading(false);
   }
+  async function loadTasks() { try { setTasks(await (await fetch(`${BACKEND}/api/tasks`)).json()); } catch {} }
+  async function loadLog()   { try { setTaskLog(await (await fetch(`${BACKEND}/api/log`)).json()); } catch {} }
 
-  async function loadTasks() {
-    try { setTasks(await (await fetch(`${BACKEND}/api/tasks`)).json()); } catch {}
+  // Load quotes for all portfolio holdings
+  async function loadQuotes() {
+    if (!portfolio?.combined?.positions?.length) return;
+    setQuotesLoading(true);
+    const syms = portfolio.combined.positions.map(p => YF_SYMBOLS[p.symbol] || p.symbol).join(",");
+    try {
+      const r = await fetch(`${BACKEND}/api/quotes?symbols=${encodeURIComponent(syms)}`);
+      setQuotes(await r.json());
+    } catch {}
+    setQuotesLoading(false);
   }
-  async function loadLog() {
-    try { setTaskLog(await (await fetch(`${BACKEND}/api/log`)).json()); } catch {}
+
+  // Load chart for a symbol
+  async function loadChart(sym, range = chartRange) {
+    if (!sym) return;
+    setChartLoading(true);
+    setChartData(null);
+    try {
+      const r = await fetch(`${BACKEND}/api/chart/${encodeURIComponent(sym)}?range=${range}&interval=${range === "1d" ? "5m" : range === "5d" ? "1h" : "1d"}`);
+      const d = await r.json();
+      setChartData(d);
+      setChartSymbol(sym);
+    } catch {}
+    setChartLoading(false);
+  }
+
+  // Load portfolio performance from equity summary history
+  async function loadPerfChart() {
+    try {
+      // Use the equity summary data we already have in the Flex data
+      const r = await fetch(`${BACKEND}/api/account`);
+      const d = await r.json();
+      // Build performance series from accounts
+      const series = d.accounts?.map(a => ({
+        accountId: a.accountId,
+        currency:  a.baseCurrency,
+        current:   a.netLiquidation,
+        starting:  a.startingValue / a.acctFxToEUR, // back to native currency
+        gain:      a.ytdGainEUR,
+        twr:       a.ytdReturn,
+      }));
+      setPerfData({ accounts: series, combined: d.combined });
+    } catch {}
   }
 
   async function toggleTask(id, enabled) {
     await fetch(`${BACKEND}/api/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
     loadTasks();
   }
-
   async function runTaskNow(id) {
     setRunningTask(id);
     await fetch(`${BACKEND}/api/tasks/${id}/run`, { method: "POST" });
-    setTimeout(async () => { await loadTasks(); await loadLog(); setRunningTask(null); }, 30000);
+    setTimeout(async () => { await loadTasks(); await loadLog(); setRunningTask(null); }, 60000);
   }
-
   async function sendMessage() {
     if (!input.trim() || loading) return;
     const text = input.trim();
@@ -111,7 +218,6 @@ export default function IBKRAgent() {
     }
     setLoading(false);
   }
-
   async function checkPush() {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) { setPushStatus("unsupported"); return; }
     try {
@@ -122,12 +228,11 @@ export default function IBKRAgent() {
       else if (Notification.permission === "denied") setPushStatus("denied");
     } catch {}
   }
-
   async function enablePush() {
     setPushStatus("requesting");
     try {
       const { publicKey } = await (await fetch(`${BACKEND}/api/push/vapid-key`)).json();
-      if (!publicKey) throw new Error("VAPID key not configured on server");
+      if (!publicKey) throw new Error("VAPID key not configured");
       if (await Notification.requestPermission() !== "granted") { setPushStatus("denied"); return; }
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToUint8(publicKey) });
@@ -135,43 +240,27 @@ export default function IBKRAgent() {
       setPushStatus("subscribed");
     } catch (e) { setPushStatus("idle"); alert("Push failed: " + e.message); }
   }
-
   async function disablePush() {
     try {
       const reg = await navigator.serviceWorker.getRegistration();
       const sub = await reg?.pushManager.getSubscription();
-      if (sub) {
-        await fetch(`${BACKEND}/api/push/unsubscribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
-        await sub.unsubscribe();
-      }
+      if (sub) { await fetch(`${BACKEND}/api/push/unsubscribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) }); await sub.unsubscribe(); }
       setPushStatus("idle");
     } catch {}
   }
 
-  // ── Derived data ──────────────────────────────────────────────────
   const combined = portfolio?.combined;
   const acct1    = portfolio?.accounts?.find(a => a.accountId === "U11354150");
   const acct2    = portfolio?.accounts?.find(a => a.accountId === "U9733561");
-
   const fmtEUR = v => `€${parseFloat(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtGBP = v => `£${parseFloat(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtPct = v => `${parseFloat(v || 0).toFixed(1)}%`;
 
-  // ── Push banner ───────────────────────────────────────────────────
   const PushBanner = () => {
-    if (pushStatus === "unsupported") return null;
-    if (pushStatus === "subscribed") return (
-      <div style={{ background: C.surfaceHigh, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "11px 14px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: C.green }}>🔔 Notifications on</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => fetch(`${BACKEND}/api/push/test`, { method: "POST" })} style={{ background: C.goldDim, border: "none", borderRadius: 8, padding: "5px 10px", color: C.goldText, fontSize: 12, cursor: "pointer" }}>Test</button>
-          <button onClick={disablePush} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "5px 10px", color: C.textMuted, fontSize: 12, cursor: "pointer" }}>Off</button>
-        </div>
-      </div>
-    );
+    if (pushStatus === "unsupported" || pushStatus === "subscribed") return null;
     if (pushStatus === "denied") return (
       <div style={{ background: C.surfaceHigh, border: `1px solid ${C.red}44`, borderRadius: 12, padding: "11px 14px", marginBottom: 12 }}>
-        <div style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>🔕 Notifications blocked — enable in Safari settings</div>
+        <div style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>🔕 Notifications blocked</div>
       </div>
     );
     return (
@@ -198,7 +287,7 @@ export default function IBKRAgent() {
               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: ibkrOk ? C.green : ibkrOk === false ? C.red : C.amber }} />
                 <span style={{ fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  {ibkrOk ? "2 accounts" : ibkrOk === false ? "Offline" : "Connecting"}
+                  {ibkrOk ? "2 accounts connected" : ibkrOk === false ? "Offline" : "Connecting"}
                 </span>
               </div>
             </div>
@@ -206,7 +295,11 @@ export default function IBKRAgent() {
           {combined && (
             <div style={{ textAlign: "right" }}>
               <Mono style={{ fontSize: 17, fontWeight: 700 }}>{fmtEUR(combined.totalNetLiquidation)}</Mono>
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>Combined NLV</div>
+              {combined.avgYtdReturnPct !== 0 && (
+                <div style={{ fontSize: 11, color: combined.avgYtdReturnPct >= 0 ? C.green : C.red, marginTop: 1 }}>
+                  {combined.avgYtdReturnPct > 0 ? "▲" : "▼"} {Math.abs(combined.avgYtdReturnPct)}% 1Y
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -214,9 +307,9 @@ export default function IBKRAgent() {
 
       {/* Tabs */}
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, background: C.surface, flexShrink: 0 }}>
-        {[["chat","💬","Chat"],["portfolio","📊","Portfolio"],["schedule","⏱","Schedule"]].map(([id, icon, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-            style={{ flex: 1, padding: "10px 0", background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: tab === id ? 700 : 400, color: tab === id ? C.goldText : C.textMuted, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent" }}>
+        {[["chat","💬","Chat"],["portfolio","📊","Portfolio"],["charts","📈","Charts"],["schedule","⏱","Schedule"]].map(([id, icon, label]) => (
+          <button key={id} onClick={() => { setTab(id); if (id === "charts" && !quotes.length) loadQuotes(); if (id === "charts") loadPerfChart(); }}
+            style={{ flex: 1, padding: "10px 0", background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: tab === id ? 700 : 400, color: tab === id ? C.goldText : C.textMuted, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent" }}>
             {icon} {label}
           </button>
         ))}
@@ -228,7 +321,7 @@ export default function IBKRAgent() {
           <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
             <PushBanner />
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 16 }}>
-              {["Combined portfolio", "Allocation breakdown", "P&L summary", "Recent trades", "Best performers"].map(q => (
+              {["Combined portfolio", "Show CSPX chart", "All holdings quotes", "P&L summary", "Compare CSPX vs S&P"].map(q => (
                 <button key={q} onClick={() => setInput(q)} style={{ background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 20, padding: "5px 11px", color: C.textMuted, fontSize: 12, cursor: "pointer" }}>{q}</button>
               ))}
             </div>
@@ -246,7 +339,7 @@ export default function IBKRAgent() {
           </div>
           <div style={{ padding: "12px 14px", borderTop: `1px solid ${C.border}`, background: C.surface, display: "flex", gap: 10, flexShrink: 0 }}>
             <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
-              placeholder="Ask about your portfolio…"
+              placeholder="Ask about portfolio, charts, any stock…"
               style={{ flex: 1, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 14px", color: C.textPrimary, fontSize: 14, outline: "none", fontFamily: "inherit" }} />
             <button onClick={sendMessage} disabled={loading}
               style={{ background: loading ? C.goldDim : C.gold, border: "none", borderRadius: 12, width: 44, cursor: loading ? "default" : "pointer", color: "#0D0F14", fontSize: 20, fontWeight: 900 }}>↑</button>
@@ -258,12 +351,10 @@ export default function IBKRAgent() {
       {tab === "portfolio" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
           {portLoading && <div style={{ color: C.textMuted, textAlign: "center", padding: 48 }}>Loading…</div>}
-
           {portfolio && !portLoading && (
             <>
-              {/* View switcher */}
               <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-                {[["combined","Combined"],["u1","U11354150 EUR"],["u2","U9733561 GBP"]].map(([v, label]) => (
+                {[["combined","Combined"],["u1","EUR Account"],["u2","GBP Account"]].map(([v, label]) => (
                   <button key={v} onClick={() => setPortfolioView(v)}
                     style={{ flex: 1, padding: "7px 4px", background: portfolioView === v ? C.goldDim : C.surfaceHigh, border: `1px solid ${portfolioView === v ? C.gold : C.border}`, borderRadius: 8, color: portfolioView === v ? C.goldText : C.textMuted, fontSize: 11, cursor: "pointer", fontWeight: portfolioView === v ? 700 : 400 }}>
                     {label}
@@ -271,34 +362,41 @@ export default function IBKRAgent() {
                 ))}
               </div>
 
-              {/* ── Combined view ── */}
               {portfolioView === "combined" && combined && (
                 <>
-                  {/* Summary cards */}
+                  <Card style={{ gridColumn: "1/-1", padding: "16px" }}>
+                    <Label>Combined Net Liquidation</Label>
+                    <Mono style={{ fontSize: 24, fontWeight: 700, color: C.goldText }}>{fmtEUR(combined.totalNetLiquidation)}</Mono>
+                    {combined.avgYtdReturnPct !== 0 && (
+                      <div style={{ marginTop: 6, display: "flex", gap: 16 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 2 }}>1Y RETURN</div>
+                          <Mono style={{ fontSize: 14, fontWeight: 700, color: combined.avgYtdReturnPct >= 0 ? C.green : C.red }}>
+                            {combined.avgYtdReturnPct > 0 ? "+" : ""}{combined.avgYtdReturnPct}%
+                          </Mono>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 2 }}>1Y GAIN</div>
+                          <PnlText value={combined.totalYtdGainEUR} style={{ fontSize: 14 }} />
+                        </div>
+                      </div>
+                    )}
+                  </Card>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 14 }}>
-                    <Card style={{ gridColumn: "1/-1", padding: "14px 16px" }}>
-                      <Label>Combined Net Liquidation</Label>
-                      <Mono style={{ fontSize: 22, fontWeight: 700, color: C.goldText }}>{fmtEUR(combined.totalNetLiquidation)}</Mono>
-                    </Card>
                     {[
                       { label: "Total Cash", val: fmtEUR(combined.totalCash) },
                       { label: "Stock Value", val: fmtEUR(combined.totalStockValue) },
                       { label: "Unrealized P&L", val: combined.totalUnrealizedPnlEUR, isPnl: true },
-                      { label: "1Y Gain", val: combined.totalYtdGainEUR, isPnl: true },
-                      { label: "1Y Return (TWR)", val: `${combined.avgYtdReturnPct > 0 ? "+" : ""}${combined.avgYtdReturnPct}%`, color: combined.avgYtdReturnPct >= 0 ? C.green : C.red },
-                      { label: "Dividends", val: fmtEUR(combined.totalDividends) },
-                      { label: "Commissions", val: fmtEUR(combined.totalCommissions) },
+                      { label: "Dividends (1Y)", val: fmtEUR(combined.totalDividends) },
+                      { label: "Commissions (1Y)", val: fmtEUR(combined.totalCommissions) },
+                      { label: "Broker Interest", val: fmtEUR(combined.totalBrokerInterest) },
                     ].map(s => (
                       <Card key={s.label} style={{ padding: "12px 14px" }}>
                         <Label>{s.label}</Label>
-                        {s.isPnl
-                          ? <PnlText value={s.val} style={{ fontSize: 15 }} />
-                          : <Mono style={{ fontSize: 15, fontWeight: 700, color: s.color || C.textPrimary }}>{s.val}</Mono>}
+                        {s.isPnl ? <PnlText value={s.val} style={{ fontSize: 15 }} /> : <Mono style={{ fontSize: 15, fontWeight: 700 }}>{s.val}</Mono>}
                       </Card>
                     ))}
                   </div>
-
-                  {/* Combined positions */}
                   <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Positions — combined allocation</div>
                   {combined.positions.map(p => (
                     <Card key={p.symbol}>
@@ -307,19 +405,18 @@ export default function IBKRAgent() {
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <Mono style={{ fontSize: 15, fontWeight: 700 }}>{p.symbol}</Mono>
                             <span style={{ fontSize: 11, color: C.textMuted }}>{fmtPct(p.allocationPct)}</span>
+                            <button onClick={() => { loadChart(YF_SYMBOLS[p.symbol] || p.symbol); setTab("charts"); }}
+                              style={{ marginLeft: "auto", background: C.goldDim, border: `1px solid ${C.gold}44`, borderRadius: 6, padding: "2px 8px", color: C.goldText, fontSize: 11, cursor: "pointer" }}>Chart</button>
                           </div>
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.description}</div>
                           <AllocationBar pct={p.allocationPct} />
                           {p.legs.length > 1 && (
-                            <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
-                              {p.legs.map(l => `${l.accountId}: ${l.quantity}`).join(" · ")}
-                            </div>
+                            <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{p.legs.map(l => `${l.accountId.slice(-7)}: ${l.quantity}`).join(" · ")}</div>
                           )}
                         </div>
                         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
                           <Mono style={{ fontSize: 14, fontWeight: 600 }}>{fmtEUR(p.totalValueEUR)}</Mono>
                           {p.totalUnrealEUR !== 0 && <div style={{ marginTop: 3 }}><PnlText value={p.totalUnrealEUR} style={{ fontSize: 12 }} /></div>}
-                          {p.totalYtdPnl !== 0 && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>YTD: <PnlText value={p.totalYtdPnl} style={{ fontSize: 11 }} /></div>}
                         </div>
                       </div>
                     </Card>
@@ -327,19 +424,18 @@ export default function IBKRAgent() {
                 </>
               )}
 
-              {/* ── Account 1 view ── */}
               {portfolioView === "u1" && acct1 && (
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 14 }}>
                     {[
                       { label: "Net Liquidation", val: fmtEUR(acct1.netLiquidation) },
                       { label: "Cash", val: fmtEUR(acct1.cash) },
-                      { label: "Stock Value", val: fmtEUR(acct1.stockValue) },
-                      { label: "Commissions YTD", val: fmtEUR(acct1.commissions) },
+                      { label: "1Y Return", val: `${acct1.ytdReturn > 0 ? "+" : ""}${acct1.ytdReturn?.toFixed(2)}%`, color: acct1.ytdReturn >= 0 ? C.green : C.red },
+                      { label: "1Y Gain", val: fmtEUR(acct1.ytdGainEUR) },
                     ].map(s => (
                       <Card key={s.label} style={{ padding: "12px 14px" }}>
                         <Label>{s.label}</Label>
-                        <Mono style={{ fontSize: 15, fontWeight: 700 }}>{s.val}</Mono>
+                        <Mono style={{ fontSize: 15, fontWeight: 700, color: s.color || C.textPrimary }}>{s.val}</Mono>
                       </Card>
                     ))}
                   </div>
@@ -349,7 +445,7 @@ export default function IBKRAgent() {
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>
                           <Mono style={{ fontSize: 14, fontWeight: 700 }}>{p.symbol}</Mono>
-                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.quantity} × {p.currency} {p.markPrice}</div>
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.quantity} × {p.currency} {parseFloat(p.markPrice).toFixed(2)}</div>
                         </div>
                         <div style={{ textAlign: "right" }}>
                           <Mono style={{ fontSize: 14, fontWeight: 600 }}>{p.currency} {parseFloat(p.positionValue).toFixed(2)}</Mono>
@@ -361,7 +457,6 @@ export default function IBKRAgent() {
                 </>
               )}
 
-              {/* ── Account 2 view ── */}
               {portfolioView === "u2" && acct2 && (
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 14 }}>
@@ -369,12 +464,11 @@ export default function IBKRAgent() {
                       { label: "Net Liquidation", val: fmtGBP(acct2.netLiquidation) },
                       { label: "In EUR", val: fmtEUR(acct2.netLiquidationEUR) },
                       { label: "Cash", val: fmtGBP(acct2.cash) },
-                      { label: "Stock Value", val: fmtGBP(acct2.stockValue) },
-                      { label: "Commissions YTD", val: fmtGBP(acct2.commissions) },
+                      { label: "1Y Return", val: `${acct2.ytdReturn > 0 ? "+" : ""}${acct2.ytdReturn?.toFixed(2)}%`, color: acct2.ytdReturn >= 0 ? C.green : C.red },
                     ].map(s => (
                       <Card key={s.label} style={{ padding: "12px 14px" }}>
                         <Label>{s.label}</Label>
-                        <Mono style={{ fontSize: 15, fontWeight: 700 }}>{s.val}</Mono>
+                        <Mono style={{ fontSize: 15, fontWeight: 700, color: s.color || C.textPrimary }}>{s.val}</Mono>
                       </Card>
                     ))}
                   </div>
@@ -384,20 +478,130 @@ export default function IBKRAgent() {
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <div>
                           <Mono style={{ fontSize: 14, fontWeight: 700 }}>{p.symbol}</Mono>
-                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.quantity} × {p.currency} {p.markPrice}</div>
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{p.quantity} × {p.currency} {parseFloat(p.markPrice).toFixed(2)}</div>
                         </div>
                         <div style={{ textAlign: "right" }}>
                           <Mono style={{ fontSize: 14, fontWeight: 600 }}>{p.currency} {parseFloat(p.positionValue).toFixed(2)}</Mono>
-                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{fmtPct(p.percentOfAccountNAV)} of account</div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{fmtPct(p.percentOfAccountNAV)}</div>
                         </div>
                       </div>
                     </Card>
                   ))}
                 </>
               )}
-
               <button onClick={loadPortfolio} style={{ width: "100%", marginTop: 8, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, color: C.textMuted, fontSize: 14, cursor: "pointer" }}>↻ Refresh</button>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ══ CHARTS ════════════════════════════════════════════════ */}
+      {tab === "charts" && (
+        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+
+          {/* Symbol search */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <input value={chartInput} onChange={e => setChartInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && loadChart(chartInput.trim())}
+              placeholder="Enter symbol e.g. CSPX.L, AAPL, BTC-USD"
+              style={{ flex: 1, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 12px", color: C.textPrimary, fontSize: 13, outline: "none" }} />
+            <button onClick={() => loadChart(chartInput.trim())}
+              style={{ background: C.gold, border: "none", borderRadius: 10, padding: "9px 14px", color: "#0D0F14", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Go</button>
+          </div>
+
+          {/* Quick access — portfolio holdings */}
+          <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Your holdings</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+            {Object.entries(YF_SYMBOLS).map(([ibkr, yf]) => (
+              <button key={ibkr} onClick={() => { setChartInput(yf); loadChart(yf); }}
+                style={{ background: chartSymbol === yf ? C.goldDim : C.surfaceHigh, border: `1px solid ${chartSymbol === yf ? C.gold : C.border}`, borderRadius: 8, padding: "5px 10px", color: chartSymbol === yf ? C.goldText : C.textMuted, fontSize: 12, cursor: "pointer" }}>
+                {ibkr}
+              </button>
+            ))}
+          </div>
+
+          {/* Range selector */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {["1mo","3mo","6mo","ytd","1y","2y","5y"].map(r => (
+              <button key={r} onClick={() => { setChartRange(r); if (chartSymbol) loadChart(chartSymbol, r); }}
+                style={{ flex: 1, padding: "6px 0", background: chartRange === r ? C.goldDim : C.surfaceHigh, border: `1px solid ${chartRange === r ? C.gold : C.border}`, borderRadius: 6, color: chartRange === r ? C.goldText : C.textMuted, fontSize: 11, cursor: "pointer", fontWeight: chartRange === r ? 700 : 400 }}>
+                {r.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* Chart type toggle */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {[["line","Line"],["candle","Candle"]].map(([t, l]) => (
+              <button key={t} onClick={() => setChartType(t)}
+                style={{ flex: 1, padding: "7px 0", background: chartType === t ? C.goldDim : C.surfaceHigh, border: `1px solid ${chartType === t ? C.gold : C.border}`, borderRadius: 8, color: chartType === t ? C.goldText : C.textMuted, fontSize: 12, cursor: "pointer", fontWeight: chartType === t ? 700 : 400 }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {/* Chart display */}
+          {chartLoading && <div style={{ color: C.textMuted, textAlign: "center", padding: 40 }}>Loading chart…</div>}
+          {chartData && !chartLoading && (
+            <Card style={{ padding: "14px 14px 8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                <div>
+                  <Mono style={{ fontSize: 16, fontWeight: 700 }}>{chartData.symbol}</Mono>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{chartData.range?.toUpperCase()} · {chartData.currency}</div>
+                </div>
+                {chartData.bars?.length > 0 && (() => {
+                  const first = chartData.bars[0].close, last = chartData.bars[chartData.bars.length - 1].close;
+                  const chg = last - first, chgPct = ((chg / first) * 100).toFixed(2);
+                  const col = chg >= 0 ? C.green : C.red;
+                  return (
+                    <div style={{ textAlign: "right" }}>
+                      <Mono style={{ fontSize: 18, fontWeight: 700 }}>{last?.toFixed(2)}</Mono>
+                      <div style={{ fontSize: 13, color: col, marginTop: 2 }}>{chg >= 0 ? "+" : ""}{chg.toFixed(2)} ({chg >= 0 ? "+" : ""}{chgPct}%)</div>
+                    </div>
+                  );
+                })()}
+              </div>
+              {chartType === "line"
+                ? <LineChart bars={chartData.bars} height={160} />
+                : <CandlestickChart bars={chartData.bars} height={200} />}
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                <div style={{ fontSize: 10, color: C.textDim }}>{chartData.bars?.[0]?.date}</div>
+                <div style={{ fontSize: 10, color: C.textDim }}>{chartData.bars?.[chartData.bars.length-1]?.date}</div>
+              </div>
+            </Card>
+          )}
+
+          {/* Live quotes for holdings */}
+          {quotes.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", margin: "16px 0 8px" }}>Live quotes — holdings</div>
+              {quotes.map(q => {
+                const chgColor = q.changePct >= 0 ? C.green : C.red;
+                return (
+                  <Card key={q.symbol} style={{ padding: "10px 14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <Mono style={{ fontSize: 13, fontWeight: 700 }}>{q.symbol}</Mono>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 1 }}>{q.shortName?.slice(0, 30)}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <Mono style={{ fontSize: 14, fontWeight: 600 }}>{q.price?.toFixed(2)}</Mono>
+                        <div style={{ fontSize: 12, color: chgColor, marginTop: 1 }}>
+                          {q.changePct >= 0 ? "+" : ""}{q.changePct?.toFixed(2)}%
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+              <button onClick={loadQuotes} style={{ width: "100%", marginTop: 4, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, color: C.textMuted, fontSize: 13, cursor: "pointer" }}>↻ Refresh quotes</button>
+            </>
+          )}
+
+          {!quotes.length && !quotesLoading && !chartData && (
+            <div style={{ textAlign: "center", color: C.textMuted, padding: "32px 0", fontSize: 14 }}>
+              Enter a symbol above or tap a holding to see its chart
+            </div>
           )}
         </div>
       )}
@@ -405,8 +609,17 @@ export default function IBKRAgent() {
       {/* ══ SCHEDULE ══════════════════════════════════════════════ */}
       {tab === "schedule" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-          <PushBanner />
-          <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Automated tasks (ET timezone)</div>
+          {pushStatus === "subscribed" ? (
+            <div style={{ background: C.surfaceHigh, border: `1px solid ${C.green}44`, borderRadius: 12, padding: "11px 14px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.green }}>🔔 Notifications active</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => fetch(`${BACKEND}/api/push/test`, { method: "POST" })} style={{ background: C.goldDim, border: "none", borderRadius: 8, padding: "5px 10px", color: C.goldText, fontSize: 12, cursor: "pointer" }}>Test</button>
+                <button onClick={disablePush} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "5px 10px", color: C.textMuted, fontSize: 12, cursor: "pointer" }}>Off</button>
+              </div>
+            </div>
+          ) : <PushBanner />}
+
+          <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Automated tasks (London time)</div>
           {tasks.map(task => (
             <Card key={task.id}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -421,7 +634,7 @@ export default function IBKRAgent() {
                     <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Last: {new Date(task.lastRun).toLocaleString()}</div>
                   )}
                   {task.lastResult && (
-                    <div style={{ fontSize: 12, color: C.textPrimary, marginTop: 6, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{task.lastResult}</div>
+                    <div style={{ fontSize: 12, color: C.textPrimary, marginTop: 8, lineHeight: 1.6, whiteSpace: "pre-wrap", borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>{task.lastResult}</div>
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0, marginLeft: 10 }}>
@@ -441,7 +654,7 @@ export default function IBKRAgent() {
           {taskLog.length > 0 && (
             <>
               <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", margin: "14px 0 8px" }}>Run log</div>
-              {taskLog.slice(0, 10).map((l, i) => (
+              {taskLog.slice(0, 8).map((l, i) => (
                 <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{l.task}</span>
