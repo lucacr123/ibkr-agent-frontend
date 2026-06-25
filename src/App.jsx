@@ -417,12 +417,12 @@ export default function IBKRAgent() {
                     <span style={{ fontWeight: 600, fontSize: 14 }}>{task.label}</span>
                     {task.running && <span style={{ fontSize: 11, color: C.amber }}>running…</span>}
                   </div>
-                  <Mono style={{ fontSize: 11, color: C.textMuted }}>{task.cron}</Mono>
+                  <Mono style={{ fontSize: 11, color: C.textMuted }}>{task.cronDisplay || task.cron}</Mono>
                   {task.lastRun && !task.running && (
                     <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>Last: {new Date(task.lastRun).toLocaleString()}</div>
                   )}
                   {task.lastResult && (
-                    <div style={{ fontSize: 12, color: C.textPrimary, marginTop: 6, lineHeight: 1.5 }}>{task.lastResult.slice(0, 200)}{task.lastResult.length > 200 ? "…" : ""}</div>
+                    <div style={{ fontSize: 12, color: C.textPrimary, marginTop: 6, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{task.lastResult}</div>
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0, marginLeft: 10 }}>
@@ -446,7 +446,7 @@ export default function IBKRAgent() {
                 <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{l.task}</span>
-                    <Mono style={{ fontSize: 11, color: C.textMuted, display: "block", marginTop: 2 }}>{new Date(l.time).toLocaleTimeString()}</Mono>
+                    <Mono style={{ fontSize: 11, color: C.textMuted, display: "block", marginTop: 2 }}>{new Date(l.time).toLocaleString()}</Mono>
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 600, color: l.status === "done" ? C.green : l.status === "error" ? C.red : C.amber, textTransform: "uppercase" }}>{l.status}</span>
                 </div>
