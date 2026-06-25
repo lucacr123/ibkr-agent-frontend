@@ -41,62 +41,149 @@ function AllocationBar({ pct }) {
   );
 }
 
-// ── Mini line chart using SVG ─────────────────────────────────────
-function LineChart({ bars, color = C.gold, height = 120 }) {
-  if (!bars?.length) return null;
-  const closes = bars.map(b => b.close).filter(Boolean);
-  if (!closes.length) return null;
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const range = max - min || 1;
-  const w = 340, h = height;
-  const pts = closes.map((c, i) => {
-    const x = (i / (closes.length - 1)) * w;
-    const y = h - ((c - min) / range) * (h - 10) - 2;
-    return `${x},${y}`;
-  }).join(" ");
-  const firstClose = closes[0], lastClose = closes[closes.length - 1];
-  const lineColor = lastClose >= firstClose ? C.green : C.red;
+// ── Shared chart helpers ─────────────────────────────────────────
+function niceStep(range, ticks = 5) {
+  const raw = range / ticks;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const n of [1, 2, 2.5, 5, 10]) if (n * mag >= raw) return n * mag;
+  return mag * 10;
+}
+function yTicks(min, max, ticks = 5) {
+  const step = niceStep(max - min || 1, ticks);
+  const start = Math.floor(min / step) * step;
+  const result = [];
+  for (let v = start; v <= max + step * 0.1; v += step) result.push(+v.toFixed(10));
+  return result;
+}
+function fmtTick(v) {
+  const abs = Math.abs(v);
+  if (abs >= 1000) return (v / 1000).toFixed(1) + "k";
+  if (abs >= 1)    return v % 1 === 0 ? v.toFixed(0) : v.toFixed(2);
+  return v.toFixed(3);
+}
+
+// Shared SVG chart with Y-axis
+function SVGChart({ series, color, height = 140, showZero = false, gradId = "g0" }) {
+  const vals = series.filter(v => v !== null && !isNaN(v));
+  if (!vals.length) return null;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const ticks = yTicks(min, max, 4);
+  const lo = ticks[0], hi = ticks[ticks.length - 1], vRange = hi - lo || 1;
+  const W = 300, H = height, YAXIS = 38, PAD = 6;
+
+  const toY = v => H - ((v - lo) / vRange) * (H - PAD * 2) - PAD;
+  const toX = i => YAXIS + (i / Math.max(series.filter(v=>v!==null).length - 1, 1)) * W;
+
+  // Build points only from non-null values
+  const nonNull = series.map((v, i) => ({ v, i })).filter(p => p.v !== null);
+  const pts = nonNull.map(({ v, i }, ni) => `${YAXIS + (ni / Math.max(nonNull.length - 1, 1)) * W},${toY(v)}`).join(" ");
+
+  const zeroY = showZero && lo < 0 && hi > 0 ? toY(0) : null;
+  const lastVal = nonNull[nonNull.length - 1]?.v;
+  const lineCol = color || (lastVal >= 0 ? C.green : C.red);
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W + YAXIS} ${H}`} style={{ width: "100%", height }} preserveAspectRatio="none">
       <defs>
-        <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lineCol} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={lineCol} stopOpacity="0" />
         </linearGradient>
+        <clipPath id={`clip_${gradId}`}>
+          <rect x={YAXIS} y={0} width={W} height={H} />
+        </clipPath>
       </defs>
-      <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="1.5" />
-      <polygon points={`0,${h} ${pts} ${w},${h}`} fill="url(#grad)" />
+
+      {/* Y-axis grid lines + labels */}
+      {ticks.map((t, i) => {
+        const y = toY(t);
+        if (y < 0 || y > H) return null;
+        return (
+          <g key={i}>
+            <line x1={YAXIS} y1={y} x2={YAXIS + W} y2={y}
+              stroke={C.border} strokeWidth="1" strokeDasharray={t === 0 ? "none" : "3,4"} opacity="0.6" />
+            <text x={YAXIS - 3} y={y + 3.5} textAnchor="end"
+              style={{ fontSize: 8, fill: C.textMuted, fontFamily: C.mono }}>{fmtTick(t)}</text>
+          </g>
+        );
+      })}
+
+      {/* Zero line bold */}
+      {zeroY !== null && (
+        <line x1={YAXIS} y1={zeroY} x2={YAXIS + W} y2={zeroY}
+          stroke={C.textDim} strokeWidth="1.5" />
+      )}
+
+      {/* Area fill */}
+      {pts && (
+        <polygon
+          points={`${YAXIS},${H} ${pts} ${YAXIS + W},${H}`}
+          fill={`url(#${gradId})`} clipPath={`url(#clip_${gradId})`} />
+      )}
+
+      {/* Line */}
+      {pts && (
+        <polyline points={pts} fill="none" stroke={lineCol} strokeWidth="1.8"
+          clipPath={`url(#clip_${gradId})`} />
+      )}
+
+      {/* Y axis border */}
+      <line x1={YAXIS} y1={0} x2={YAXIS} y2={H} stroke={C.border} strokeWidth="1" />
     </svg>
   );
+}
+
+// ── Line chart (price) ────────────────────────────────────────────
+function LineChart({ bars, height = 140 }) {
+  if (!bars?.length) return null;
+  const closes = bars.map(b => b.close).filter(Boolean);
+  const first = closes[0], last = closes[closes.length - 1];
+  const col = last >= first ? C.green : C.red;
+  return <SVGChart series={closes} color={col} height={height} gradId="price_line" />;
 }
 
 // ── Candlestick chart ─────────────────────────────────────────────
 function CandlestickChart({ bars, height = 200 }) {
   if (!bars?.length) return null;
-  const recent = bars.slice(-60);
+  const recent = bars.slice(-80);
   const highs  = recent.map(b => b.high).filter(Boolean);
   const lows   = recent.map(b => b.low).filter(Boolean);
-  const min = Math.min(...lows), max = Math.max(...highs), range = max - min || 1;
-  const w = 340, h = height, pad = 4;
-  const candleW = Math.max(2, (w / recent.length) - 1.5);
+  if (!highs.length) return null;
+  const rawMin = Math.min(...lows), rawMax = Math.max(...highs);
+  const ticks  = yTicks(rawMin, rawMax, 4);
+  const lo = ticks[0], hi = ticks[ticks.length - 1], vRange = hi - lo || 1;
+  const W = 300, H = height, YAXIS = 38, PAD = 4;
+  const toY = v => H - ((v - lo) / vRange) * (H - PAD * 2) - PAD;
+  const candleW = Math.max(2, (W / recent.length) - 1);
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W + YAXIS} ${H}`} style={{ width: "100%", height }} preserveAspectRatio="none">
+      {/* Y axis */}
+      {ticks.map((t, i) => {
+        const y = toY(t);
+        if (y < 0 || y > H) return null;
+        return (
+          <g key={i}>
+            <line x1={YAXIS} y1={y} x2={YAXIS + W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.6" />
+            <text x={YAXIS - 3} y={y + 3.5} textAnchor="end"
+              style={{ fontSize: 8, fill: C.textMuted, fontFamily: C.mono }}>{fmtTick(t)}</text>
+          </g>
+        );
+      })}
+      <line x1={YAXIS} y1={0} x2={YAXIS} y2={H} stroke={C.border} strokeWidth="1" />
+      {/* Candles */}
       {recent.map((b, i) => {
         if (!b.open || !b.close || !b.high || !b.low) return null;
         const bull = b.close >= b.open;
         const col  = bull ? C.green : C.red;
-        const x    = (i / recent.length) * w;
-        const yH   = h - ((b.high  - min) / range) * (h - pad * 2) - pad;
-        const yL   = h - ((b.low   - min) / range) * (h - pad * 2) - pad;
-        const yO   = h - ((b.open  - min) / range) * (h - pad * 2) - pad;
-        const yC   = h - ((b.close - min) / range) * (h - pad * 2) - pad;
+        const x    = YAXIS + (i / recent.length) * W;
+        const yH = toY(b.high), yL = toY(b.low);
+        const yO = toY(b.open), yC = toY(b.close);
         const bodyT = Math.min(yO, yC), bodyH = Math.max(Math.abs(yC - yO), 1);
         return (
           <g key={i}>
             <line x1={x + candleW / 2} y1={yH} x2={x + candleW / 2} y2={yL} stroke={col} strokeWidth="1" />
-            <rect x={x} y={bodyT} width={candleW} height={bodyH} fill={col} opacity="0.85" />
+            <rect x={x} y={bodyT} width={candleW} height={bodyH} fill={col} opacity="0.9" />
           </g>
         );
       })}
@@ -138,7 +225,7 @@ function InlineChart({ symbol, range = "1y" }) {
           <div style={{ fontSize: 12, color: chgCol }}>{chg >= 0 ? "+" : ""}{chg.toFixed(2)} ({chg >= 0 ? "+" : ""}{chgPct}%)</div>
         </div>
       </div>
-      {type === "line" ? <LineChart bars={bars} height={140} /> : <CandlestickChart bars={bars} height={180} />}
+      {type === "line" ? <LineChart bars={bars} height={150} /> : <CandlestickChart bars={bars} height={190} />}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
         <div style={{ fontSize: 10, color: C.textDim }}>{bars[0]?.date} → {bars[bars.length-1]?.date}</div>
         <div style={{ display: "flex", gap: 6 }}>
@@ -153,11 +240,12 @@ function InlineChart({ symbol, range = "1y" }) {
 }
 
 // ── Quant metric chart ───────────────────────────────────────────
-function QuantChart({ symbol, metric, range, label }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+function QuantChart({ symbol, metric, range, label, data: propData = null }) {
+  const [data, setData] = useState(propData);
+  const [loading, setLoading] = useState(!propData);
 
   useEffect(() => {
+    if (propData) { setData(propData); setLoading(false); return; }
     fetch(`${BACKEND}/api/analytics/${encodeURIComponent(symbol)}?range=${range}`)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
@@ -165,51 +253,97 @@ function QuantChart({ symbol, metric, range, label }) {
   }, [symbol, metric, range]);
 
   if (loading) return <div style={{ padding: "10px 0", color: C.textMuted, fontSize: 12 }}>Loading {label}…</div>;
-  if (!data || !data[metric]) return <div style={{ color: C.red, fontSize: 12 }}>{label} not available</div>;
+  if (!data || !data[metric]) return null;
 
-  const series = data[metric].filter(v => v !== null);
-  const dates  = data.dates?.slice(-series.length) || [];
-  if (!series.length) return null;
+  const series  = data[metric];
+  const dates   = data.dates || [];
+  const nonNull = series.filter(v => v !== null);
+  if (!nonNull.length) return null;
 
-  const min = Math.min(...series), max = Math.max(...series), range_ = max - min || 1;
-  const w = 340, h = 120, pad = 6;
-  const isZero = v => Math.abs(v) < 0.001;
-
-  // Color: green if positive, red if negative, gold for z-score
-  const isZscore = metric.includes("Zscore") || metric.includes("zscore");
-  const lineCol  = isZscore ? C.gold : (series[series.length-1] >= 0 ? C.green : C.red);
-
-  const pts = series.map((v, i) => {
-    const x = (i / Math.max(series.length - 1, 1)) * w;
-    const y = h - ((v - min) / range_) * (h - pad * 2) - pad;
-    return `${x},${y}`;
-  }).join(" ");
-
-  const zeroY = h - ((0 - min) / range_) * (h - pad * 2) - pad;
-  const showZeroLine = min < 0 && max > 0;
-  const last = series[series.length - 1];
-  const lastCol = isZscore ? C.gold : last >= 0 ? C.green : C.red;
+  const last      = nonNull[nonNull.length - 1];
+  const isZscore  = metric.includes("Zscore") || metric.includes("zscore");
+  const isDd      = metric.includes("drawdown") || metric.includes("Drawdown");
+  const lineCol   = isZscore ? C.gold : isDd ? C.red : (last >= 0 ? C.green : C.red);
+  const lastCol   = isZscore ? C.gold : isDd ? C.red : (last >= 0 ? C.green : C.red);
+  const showZero  = !isDd && nonNull.some(v => v < 0) && nonNull.some(v => v > 0);
 
   return (
-    <div style={{ marginTop: 10, background: C.surfaceHigh, borderRadius: 12, padding: "12px 14px", border: `1px solid ${C.border}` }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{label}</div>
-        <Mono style={{ fontSize: 15, fontWeight: 700, color: lastCol }}>{last?.toFixed(3)}</Mono>
+    <div style={{ marginTop: 10, background: C.surfaceHigh, borderRadius: 12, padding: "12px 14px 8px", border: `1px solid ${C.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted }}>{label}</div>
+        <Mono style={{ fontSize: 14, fontWeight: 700, color: lastCol }}>{last?.toFixed(3)}</Mono>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: h }} preserveAspectRatio="none">
-        {showZeroLine && <line x1="0" y1={zeroY} x2={w} y2={zeroY} stroke={C.border} strokeWidth="1" strokeDasharray="4,4" />}
-        <defs>
-          <linearGradient id={`grad_${metric}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={lineCol} stopOpacity="0.25" />
-            <stop offset="100%" stopColor={lineCol} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polyline points={pts} fill="none" stroke={lineCol} strokeWidth="1.5" />
-        {!showZeroLine && <polygon points={`0,${h} ${pts} ${w},${h}`} fill={`url(#grad_${metric})`} />}
-      </svg>
+      <SVGChart series={series} color={lineCol} height={110} showZero={showZero} gradId={`qc_${metric}_${symbol}`} />
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-        <div style={{ fontSize: 10, color: C.textDim }}>{dates[0]}</div>
-        <div style={{ fontSize: 10, color: C.textDim }}>{dates[dates.length-1]}</div>
+        <div style={{ fontSize: 9, color: C.textDim }}>{dates[0]}</div>
+        <div style={{ fontSize: 9, color: C.textDim }}>{dates[dates.length-1]}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Rolling Beta chart (fetches benchmark separately) ─────────────
+function RollingBetaChart({ symbol, range, window: win = 30, benchmark = "^GSPC" }) {
+  const [betaSeries, setBetaSeries] = useState(null);
+  const [dates, setDates]           = useState(null);
+  const [loading, setLoading]       = useState(true);
+
+  useEffect(() => {
+    async function compute() {
+      setLoading(true);
+      try {
+        const [ar, br] = await Promise.all([
+          fetch(`${BACKEND}/api/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`).then(r=>r.json()),
+          fetch(`${BACKEND}/api/chart/${encodeURIComponent(benchmark)}?range=${range}&interval=1d`).then(r=>r.json()),
+        ]);
+        const ac = ar.bars?.map(b => b.close).filter(Boolean) || [];
+        const bc = br.bars?.map(b => b.close).filter(Boolean) || [];
+        const ds = ar.bars?.map(b => b.date) || [];
+
+        // Align lengths
+        const len = Math.min(ac.length, bc.length);
+        const a = ac.slice(-len), b = bc.slice(-len), d = ds.slice(-len);
+
+        // Daily returns
+        const aRet = a.slice(1).map((v,i) => (v - a[i]) / a[i]);
+        const bRet = b.slice(1).map((v,i) => (v - b[i]) / b[i]);
+
+        // Rolling beta (window days)
+        const series = new Array(win).fill(null);
+        for (let i = win; i <= aRet.length; i++) {
+          const ar_ = aRet.slice(i - win, i);
+          const br_ = bRet.slice(i - win, i);
+          const ma = ar_.reduce((s,v)=>s+v,0)/ar_.length;
+          const mb = br_.reduce((s,v)=>s+v,0)/br_.length;
+          const cov = ar_.reduce((s,v,j)=>s+(v-ma)*(br_[j]-mb),0)/ar_.length;
+          const vb  = br_.reduce((s,v)=>s+(v-mb)**2,0)/br_.length;
+          series.push(vb===0 ? null : +(cov/vb).toFixed(4));
+        }
+        setBetaSeries(series);
+        setDates(d);
+      } catch {}
+      setLoading(false);
+    }
+    compute();
+  }, [symbol, range, win]);
+
+  if (loading) return <div style={{ padding: "10px 0", color: C.textMuted, fontSize: 12 }}>Computing rolling beta vs {benchmark}…</div>;
+  if (!betaSeries) return null;
+
+  const nonNull = betaSeries.filter(v => v !== null);
+  if (!nonNull.length) return null;
+  const last = nonNull[nonNull.length - 1];
+
+  return (
+    <div style={{ marginTop: 10, background: C.surfaceHigh, borderRadius: 12, padding: "12px 14px 8px", border: `1px solid ${C.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted }}>Rolling Beta vs {benchmark} ({win}d)</div>
+        <Mono style={{ fontSize: 14, fontWeight: 700, color: C.blue }}>{last?.toFixed(3)}</Mono>
+      </div>
+      <SVGChart series={betaSeries} color={C.blue} height={110} showZero={true} gradId={`beta_${symbol}`} />
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+        <div style={{ fontSize: 9, color: C.textDim }}>{dates?.[0]}</div>
+        <div style={{ fontSize: 9, color: C.textDim }}>{dates?.[dates.length-1]}</div>
       </div>
     </div>
   );
@@ -263,6 +397,8 @@ export default function IBKRAgent() {
   const [quotesLoading, setQuotesLoading] = useState(false);
   // Portfolio performance chart
   const [perfData, setPerfData]       = useState(null);
+  const [quantData, setQuantData]     = useState(null);
+  const [quantLoading, setQuantLoading] = useState(false);
   const chatEndRef = useRef(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -298,13 +434,34 @@ export default function IBKRAgent() {
     if (!sym) return;
     setChartLoading(true);
     setChartData(null);
+    setQuantData(null);
     try {
       const r = await fetch(`${BACKEND}/api/chart/${encodeURIComponent(sym)}?range=${range}&interval=${range === "1d" ? "5m" : range === "5d" ? "1h" : "1d"}`);
       const d = await r.json();
       setChartData(d);
       setChartSymbol(sym);
+      // Also load quant data async
+      loadQuantData(sym, range);
     } catch {}
     setChartLoading(false);
+  }
+
+  // Load quant analytics for current chart symbol
+  async function loadQuantData(sym, range = chartRange) {
+    if (!sym) return;
+    setQuantLoading(true);
+    setQuantData(null);
+    try {
+      // Compute directly on backend (caches result server-side)
+      const r = await fetch(`${BACKEND}/api/analytics/compute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: sym, range, rolling_window: 30 }),
+      });
+      const d = await r.json();
+      if (d.series) setQuantData({ ...d.series, symbol: sym, range });
+    } catch {}
+    setQuantLoading(false);
   }
 
   // Load portfolio performance from equity summary history
@@ -672,7 +829,7 @@ export default function IBKRAgent() {
             ))}
           </div>
 
-          {/* Chart display */}
+          {/* Price chart */}
           {chartLoading && <div style={{ color: C.textMuted, textAlign: "center", padding: 40 }}>Loading chart…</div>}
           {chartData && !chartLoading && (
             <Card style={{ padding: "14px 14px 8px" }}>
@@ -702,6 +859,60 @@ export default function IBKRAgent() {
               </div>
             </Card>
           )}
+
+          {/* Quant panels — auto-load when chart is selected */}
+          {quantLoading && chartSymbol && (
+            <div style={{ color: C.textMuted, fontSize: 12, textAlign: "center", padding: "12px 0" }}>Computing Z-score, volatility, beta…</div>
+          )}
+          {quantData && !quantLoading && (() => {
+            const { dates, priceZscore, rollingVol, rollingSharpe, drawdownSeries } = quantData;
+            if (!dates) return null;
+
+            // Compute rolling beta vs SPX inline from cached data
+            // We'll use the QuantChart component which fetches from /api/analytics
+            const sym = quantData.symbol;
+            const rng = quantData.range;
+
+            // Summary stats from last values
+            const lastZ   = priceZscore?.filter(v => v !== null).slice(-1)[0];
+            const lastVol = rollingVol?.filter(v => v !== null).slice(-1)[0];
+            const lastSharpe = rollingSharpe?.filter(v => v !== null).slice(-1)[0];
+            const lastDD  = drawdownSeries?.slice(-1)[0];
+
+            return (
+              <>
+                {/* Stats row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 7, marginBottom: 12 }}>
+                  {[
+                    { label: "Z-Score", val: lastZ?.toFixed(2), color: lastZ > 2 ? C.red : lastZ < -2 ? C.green : C.gold },
+                    { label: "Ann. Vol", val: lastVol ? lastVol.toFixed(1) + "%" : "—", color: C.textPrimary },
+                    { label: "Sharpe", val: lastSharpe?.toFixed(2), color: lastSharpe > 1 ? C.green : lastSharpe < 0 ? C.red : C.amber },
+                    { label: "Max DD", val: lastDD ? lastDD.toFixed(1) + "%" : "—", color: C.red },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 8px", textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{s.label}</div>
+                      <Mono style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.val ?? "—"}</Mono>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Z-Score chart */}
+                <QuantChart symbol={sym} metric="priceZscore" range={rng} label="Z-Score — price vs 30d rolling mean" />
+
+                {/* Rolling Vol chart */}
+                <QuantChart symbol={sym} metric="rollingVol" range={rng} label="Rolling Volatility % (annualised, 30d)" />
+
+                {/* Rolling Sharpe chart */}
+                <QuantChart symbol={sym} metric="rollingSharpe" range={rng} label="Rolling Sharpe Ratio (30d)" />
+
+                {/* Drawdown chart */}
+                <QuantChart symbol={sym} metric="drawdownSeries" range={rng} label="Drawdown %" />
+
+                {/* Rolling Beta vs SPX */}
+                <RollingBetaChart symbol={sym} range={rng} window={30} benchmark="^GSPC" />
+              </>
+            );
+          })()}
 
           {/* Live quotes for holdings */}
           {quotes.length > 0 && (
