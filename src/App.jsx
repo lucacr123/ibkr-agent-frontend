@@ -120,6 +120,61 @@ function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
   );
 }
 
+function DistributionPanel({label,distribution,id="dist"}){
+  if(!distribution?.length)return null;
+  const max=Math.max(...distribution.map(b=>b.count||0),1);
+  const W=300,H=110,Y=38,P=8;
+  const bw=W/distribution.length;
+  return(
+    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px 8px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+        <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
+        <Mono style={{fontSize:13,fontWeight:700,color:C.goldText}}>{distribution.reduce((s,b)=>s+(b.count||0),0)} obs</Mono>
+      </div>
+      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
+        {[0,0.5,1].map((p,i)=>{const y=H-P-p*(H-P*2);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.45"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{Math.round(max*p)}</text></g>);})}
+        <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
+        {distribution.map((b,i)=>{
+          const h=((b.count||0)/max)*(H-P*2);
+          return <rect key={i} x={Y+i*bw+1} y={H-P-h} width={Math.max(1,bw-2)} height={h} fill={C.gold} opacity="0.85" rx="1"/>;
+        })}
+      </svg>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span style={{fontSize:9,color:C.textDim}}>{distribution[0]?.binStart}%</span><span style={{fontSize:9,color:C.textDim}}>Daily return buckets</span><span style={{fontSize:9,color:C.textDim}}>{distribution[distribution.length-1]?.binEnd}%</span></div>
+    </div>
+  );
+}
+
+// ── Inline quant chart from @@QUANT tags ──────────────────────────
+function InlineQuant({symbol,metric,range="1y",label}){
+  const [data,setData]=useState(null);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    let cancelled=false;
+    async function go(){
+      setLoading(true);setData(null);
+      try{
+        let r=await fetch(`${BACKEND}/api/analytics/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}`);
+        let d=await r.json();
+        if(!r.ok||d.error){
+          r=await fetch(`${BACKEND}/api/analytics/compute`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol,range,rolling_window:30})});
+          d=await r.json();
+        }
+        if(!cancelled)setData(d);
+      }catch(e){ if(!cancelled)setData({error:e.message}); }
+      if(!cancelled)setLoading(false);
+    }
+    go();
+    return()=>{cancelled=true;};
+  },[symbol,metric,range]);
+  if(loading)return<div style={{padding:"12px 0",color:C.textMuted,fontSize:12}}>Loading {label||metric}…</div>;
+  if(!data||data.error)return<div style={{color:C.red,fontSize:12}}>No quant data for {symbol}</div>;
+  if(metric==="distribution")return<DistributionPanel label={label||"Return Distribution"} distribution={data.distribution} id={`iq_${symbol}_${metric}`}/>;
+  const series=data[metric];
+  const showZero=!["rollingVol","rollingVaR95","rollingVaR99"].includes(metric);
+  const color=metric.includes("VaR")?C.red:metric==="rollingVol"?C.blue:metric==="drawdownSeries"?C.red:metric==="priceZscore"?C.gold:undefined;
+  return<QuantPanel label={label||metric} series={series} dates={data.dates} color={color} showZero={showZero} id={`iq_${symbol}_${metric}`}/>;
+}
+
 // ── Rolling Beta (fetches SPX independently) ──────────────────────
 function BetaPanel({symbol,range}){
   const [series,setSeries]=useState(null);
@@ -203,6 +258,8 @@ function MessageContent({content}){
   return<>{parts.map((p,i)=>{
     const cm=p.match(/^@@CHART:([^:]+):([^@]+)@@$/);
     if(cm)return<InlineChart key={i} symbol={cm[1]} range={cm[2]}/>;
+    const qm=p.match(/^@@QUANT:([^:]+):([^:]+):([^:]+):([^@]+)@@$/);
+    if(qm)return<InlineQuant key={i} symbol={qm[1]} metric={qm[2]} range={qm[3]} label={qm[4]}/>;
     if(p)return<span key={i} style={{whiteSpace:"pre-wrap"}}>{p}</span>;
     return null;
   })}</>;
@@ -270,7 +327,7 @@ export default function App(){
       const r=await fetch(`${BACKEND}/api/analytics/compute`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:sym,range:range||"1y",rolling_window:30})});
       const d=await r.json();
       console.log("quant response keys:",Object.keys(d));
-      // Server returns: { dates, closes, priceZscore, rollingSharpe, rollingVol, drawdownSeries, summary, symbol, range }
+      // Server returns: { dates, closes, returns, distribution, rolling VaR, priceZscore, rollingSharpe, rollingVol, drawdownSeries, summary, symbol, range }
       if(d.dates&&d.priceZscore){
         setQuantData(d);
         console.log("quantData set, priceZscore length:",d.priceZscore.length);
@@ -364,7 +421,7 @@ export default function App(){
           <div style={{flex:1,overflowY:"auto",padding:16}}>
             <PushBanner/>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
-              {["Combined portfolio","Show CSPX.L chart","All holdings quotes","P&L summary","Rolling Sharpe CSPX.L"].map(q=>(
+              {["Combined portfolio","Show CSPX.L chart","All holdings quotes","P&L summary","VaR CSPX.L","Return distribution CSPX.L","Rolling VaR CSPX.L"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
               ))}
             </div>
@@ -536,7 +593,11 @@ export default function App(){
                   {[
                     {label:"Z-Score (ret)",val:s.currentReturnZscore?.toFixed(3),color:s.currentReturnZscore>2?C.red:s.currentReturnZscore<-2?C.green:C.gold},
                     {label:"Ann. Vol",val:s.annualizedVol?s.annualizedVol.toFixed(1)+"%":"—",color:C.textPrimary},
+                    {label:"VaR 95",val:s.var95!==null&&s.var95!==undefined?s.var95.toFixed(2)+"%":"—",color:C.red},
+                    {label:"CVaR 95",val:s.cvar95!==null&&s.cvar95!==undefined?s.cvar95.toFixed(2)+"%":"—",color:C.red},
                     {label:"Sharpe",val:s.sharpe?.toFixed(2),color:s.sharpe>1?C.green:s.sharpe<0?C.red:C.amber},
+                    {label:"Skew",val:s.skewness?.toFixed(2),color:s.skewness<0?C.red:C.green},
+                    {label:"Kurt",val:s.kurtosis?.toFixed(2),color:C.amber},
                     {label:"Max DD",val:s.maxDrawdown?s.maxDrawdown.toFixed(1)+"%":"—",color:C.red},
                   ].map(st=>(
                     <div key={st.label} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 8px",textAlign:"center"}}>
@@ -546,7 +607,11 @@ export default function App(){
                   ))}
                 </div>
                 <QuantPanel label="Z-Score (30d rolling)" series={quantData.priceZscore} dates={dates} color={C.gold} showZero={true} id="q_zscore"/>
+                <QuantPanel label="Daily Returns %" series={quantData.returns} dates={dates} showZero={true} id="q_returns"/>
+                <DistributionPanel label="Return Distribution" distribution={quantData.distribution} id="q_dist"/>
                 <QuantPanel label="Rolling Volatility % ann. (30d)" series={quantData.rollingVol} dates={dates} color={C.blue} showZero={false} id="q_vol"/>
+                <QuantPanel label="Rolling VaR 95% (30d)" series={quantData.rollingVaR95} dates={dates} color={C.red} showZero={false} id="q_var95"/>
+                <QuantPanel label="Rolling VaR 99% (30d)" series={quantData.rollingVaR99} dates={dates} color={C.red} showZero={false} id="q_var99"/>
                 <QuantPanel label="Rolling Sharpe Ratio (30d)" series={quantData.rollingSharpe} dates={dates} showZero={true} id="q_sharpe"/>
                 <QuantPanel label="Drawdown % from peak" series={quantData.drawdownSeries} dates={dates} color={C.red} showZero={false} id="q_dd"/>
                 <QuantPanel label="Z-Score of Returns (30d rolling)" series={quantData.priceZscore30} dates={quantData.dates} color={C.blue} showZero={true} id="q_zscore30"/>
