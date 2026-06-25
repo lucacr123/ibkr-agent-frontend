@@ -104,6 +104,70 @@ function CandlestickChart({ bars, height = 200 }) {
   );
 }
 
+// ── Inline chat chart ────────────────────────────────────────────
+function InlineChart({ symbol, range = "1y" }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [type, setType] = useState("line");
+
+  useEffect(() => {
+    const interval = range === "1d" ? "5m" : range === "5d" ? "1h" : "1d";
+    fetch(`${BACKEND}/api/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [symbol, range]);
+
+  if (loading) return <div style={{ padding: "12px 0", color: C.textMuted, fontSize: 12 }}>Loading chart…</div>;
+  if (!data?.bars?.length) return <div style={{ padding: "8px 0", color: C.red, fontSize: 12 }}>No chart data for {symbol}</div>;
+
+  const bars   = data.bars;
+  const first  = bars[0].close, last = bars[bars.length - 1].close;
+  const chg    = last - first, chgPct = ((chg / first) * 100).toFixed(2);
+  const chgCol = chg >= 0 ? C.green : C.red;
+
+  return (
+    <div style={{ marginTop: 10, background: C.surfaceHigh, borderRadius: 12, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div>
+          <Mono style={{ fontSize: 14, fontWeight: 700 }}>{data.symbol}</Mono>
+          <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{range.toUpperCase()} · {data.currency}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <Mono style={{ fontSize: 16, fontWeight: 700 }}>{last?.toFixed(2)}</Mono>
+          <div style={{ fontSize: 12, color: chgCol }}>{chg >= 0 ? "+" : ""}{chg.toFixed(2)} ({chg >= 0 ? "+" : ""}{chgPct}%)</div>
+        </div>
+      </div>
+      {type === "line" ? <LineChart bars={bars} height={140} /> : <CandlestickChart bars={bars} height={180} />}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+        <div style={{ fontSize: 10, color: C.textDim }}>{bars[0]?.date} → {bars[bars.length-1]?.date}</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[["line","Line"],["candle","Candle"]].map(([t,l]) => (
+            <button key={t} onClick={() => setType(t)}
+              style={{ padding: "3px 8px", background: type===t ? C.goldDim : "none", border: `1px solid ${type===t ? C.gold : C.border}`, borderRadius: 6, color: type===t ? C.goldText : C.textMuted, fontSize: 10, cursor: "pointer" }}>{l}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Parse message content — split on [CHART:SYMBOL:RANGE] tags
+function MessageContent({ content }) {
+  if (!content) return null;
+  const parts = content.split(/(\[CHART:[^\]]+\])/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const match = part.match(/^\[CHART:([^:]+):([^\]]+)\]$/);
+        if (match) return <InlineChart key={i} symbol={match[1]} range={match[2]} />;
+        if (part) return <span key={i} style={{ whiteSpace: "pre-wrap" }}>{part}</span>;
+        return null;
+      })}
+    </>
+  );
+}
+
 export default function IBKRAgent() {
   const [tab, setTab] = useState("chat");
   const [messages, setMessages] = useState([{
@@ -331,7 +395,7 @@ export default function IBKRAgent() {
                   <div style={{ width: 26, height: 26, borderRadius: "50%", background: C.goldDim, border: `1px solid ${C.gold}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, flexShrink: 0 }}>🤖</div>
                 )}
                 <div style={{ maxWidth: "82%", padding: "10px 14px", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.role === "user" ? "#1E3A5F" : C.surfaceHigh, border: m.role === "user" ? "none" : `1px solid ${C.border}`, color: C.textPrimary, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                  {m.loading ? <span style={{ opacity: 0.4 }}>Thinking…</span> : m.content}
+                  {m.loading ? <span style={{ opacity: 0.4 }}>Thinking…</span> : <MessageContent content={m.content} />}
                 </div>
               </div>
             ))}
