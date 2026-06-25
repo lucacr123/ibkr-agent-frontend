@@ -469,7 +469,8 @@ export default function IBKRAgent() {
         body: JSON.stringify({ symbol: sym, range, rolling_window: 30 }),
       });
       const d = await r.json();
-      if (d.series) setQuantData({ ...d.series, symbol: sym, range });
+      // Server returns series fields at top level (dates, priceZscore, etc.)
+      if (d.dates) setQuantData({ ...d, symbol: sym, range });
     } catch {}
     setQuantLoading(false);
   }
