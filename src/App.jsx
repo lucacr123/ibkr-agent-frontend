@@ -64,6 +64,9 @@ function fmtTick(v) {
 
 // Shared SVG chart with Y-axis
 function SVGChart({ series, color, height = 140, showZero = false, gradId = "g0" }) {
+  if (!series || !series.length) return null;
+  const parsed = series.map(v => (v === null || v === undefined) ? null : parseFloat(v));
+  series = parsed;
   const vals = series.filter(v => v !== null && !isNaN(v));
   if (!vals.length) return null;
   const min = Math.min(...vals), max = Math.max(...vals);
@@ -75,8 +78,8 @@ function SVGChart({ series, color, height = 140, showZero = false, gradId = "g0"
   const toX = i => YAXIS + (i / Math.max(series.filter(v=>v!==null).length - 1, 1)) * W;
 
   // Build points only from non-null values
-  const nonNull = series.map((v, i) => ({ v, i })).filter(p => p.v !== null);
-  const pts = nonNull.map(({ v, i }, ni) => `${YAXIS + (ni / Math.max(nonNull.length - 1, 1)) * W},${toY(v)}`).join(" ");
+  const nonNull = series.map((v, i) => ({ v, ni: i })).filter(p => p.v !== null && !isNaN(p.v));
+  const pts = nonNull.map(({ v }, ni) => `${YAXIS + (ni / Math.max(nonNull.length - 1, 1)) * W},${toY(v)}`).join(" ");
 
   const zeroY = showZero && lo < 0 && hi > 0 ? toY(0) : null;
   const lastVal = nonNull[nonNull.length - 1]?.v;
@@ -136,7 +139,7 @@ function SVGChart({ series, color, height = 140, showZero = false, gradId = "g0"
 // ── Line chart (price) ────────────────────────────────────────────
 function LineChart({ bars, height = 140 }) {
   if (!bars?.length) return null;
-  const closes = bars.map(b => b.close).filter(Boolean);
+  const closes = bars.map(b => parseFloat(b.close)).filter(v => !isNaN(v));
   const first = closes[0], last = closes[closes.length - 1];
   const col = last >= first ? C.green : C.red;
   return <SVGChart series={closes} color={col} height={height} gradId="price_line" />;
@@ -873,7 +876,11 @@ export default function IBKRAgent() {
           )}
           {quantData && !quantLoading && (() => {
             const { dates, priceZscore, rollingVol, rollingSharpe, drawdownSeries } = quantData;
-            if (!dates) return null;
+            if (!dates || !priceZscore) return (
+              <div style={{ color: C.red, fontSize: 12, padding: "8px 0" }}>
+                Quant data incomplete — keys: {Object.keys(quantData).join(", ")}
+              </div>
+            );
 
             // Compute rolling beta vs SPX inline from cached data
             // We'll use the QuantChart component which fetches from /api/analytics
