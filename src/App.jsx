@@ -875,54 +875,57 @@ export default function IBKRAgent() {
             <div style={{ color: C.textMuted, fontSize: 12, textAlign: "center", padding: "12px 0" }}>Computing Z-score, volatility, beta…</div>
           )}
           {quantData && !quantLoading && (() => {
-            const { dates, priceZscore, rollingVol, rollingSharpe, drawdownSeries } = quantData;
-            if (!dates || !priceZscore) return (
-              <div style={{ color: C.red, fontSize: 12, padding: "8px 0" }}>
-                Quant data incomplete — keys: {Object.keys(quantData).join(", ")}
-              </div>
-            );
-
-            // Compute rolling beta vs SPX inline from cached data
-            // We'll use the QuantChart component which fetches from /api/analytics
             const sym = quantData.symbol;
             const rng = quantData.range;
+            const s   = quantData.summary || {};
 
-            // Summary stats from last values
-            const lastZ   = priceZscore?.filter(v => v !== null).slice(-1)[0];
-            const lastVol = rollingVol?.filter(v => v !== null).slice(-1)[0];
-            const lastSharpe = rollingSharpe?.filter(v => v !== null).slice(-1)[0];
-            const lastDD  = drawdownSeries?.slice(-1)[0];
+            // Helper to render a quant panel inline — no component dependency
+            const QuickPanel = ({ label, series, dates, color, showZero }) => {
+              if (!series?.length) return null;
+              const parsed  = series.map(v => v === null ? null : parseFloat(v));
+              const nonNull = parsed.filter(v => v !== null && !isNaN(v));
+              if (!nonNull.length) return null;
+              const last = nonNull[nonNull.length - 1];
+              const col  = color || (last >= 0 ? C.green : C.red);
+              return (
+                <div style={{ marginTop: 10, background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px 8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 600 }}>{label}</span>
+                    <Mono style={{ fontSize: 13, fontWeight: 700, color: col }}>{last.toFixed(3)}</Mono>
+                  </div>
+                  <SVGChart series={parsed} color={col} height={110} showZero={showZero} gradId={`qp_${label.replace(/\s/g,"_")}`} />
+                  {dates && (
+                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                      <span style={{ fontSize: 9, color: C.textDim }}>{dates[0]}</span>
+                      <span style={{ fontSize: 9, color: C.textDim }}>{dates[dates.length-1]}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            };
 
+            const dates = quantData.dates;
             return (
               <>
                 {/* Stats row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 7, marginBottom: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 7, marginBottom: 4 }}>
                   {[
-                    { label: "Z-Score", val: lastZ?.toFixed(2), color: lastZ > 2 ? C.red : lastZ < -2 ? C.green : C.gold },
-                    { label: "Ann. Vol", val: lastVol ? lastVol.toFixed(1) + "%" : "—", color: C.textPrimary },
-                    { label: "Sharpe", val: lastSharpe?.toFixed(2), color: lastSharpe > 1 ? C.green : lastSharpe < 0 ? C.red : C.amber },
-                    { label: "Max DD", val: lastDD ? lastDD.toFixed(1) + "%" : "—", color: C.red },
-                  ].map(s => (
-                    <div key={s.label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 8px", textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{s.label}</div>
-                      <Mono style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.val ?? "—"}</Mono>
+                    { label: "Z-Score", val: s.currentPriceZscore?.toFixed(2), color: s.currentPriceZscore > 2 ? C.red : s.currentPriceZscore < -2 ? C.green : C.gold },
+                    { label: "Ann. Vol", val: s.annualizedVol ? s.annualizedVol.toFixed(1) + "%" : "—", color: C.textPrimary },
+                    { label: "Sharpe",   val: s.sharpe?.toFixed(2), color: s.sharpe > 1 ? C.green : s.sharpe < 0 ? C.red : C.amber },
+                    { label: "Max DD",   val: s.maxDrawdown ? s.maxDrawdown.toFixed(1) + "%" : "—", color: C.red },
+                  ].map(st => (
+                    <div key={st.label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 8px", textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{st.label}</div>
+                      <Mono style={{ fontSize: 13, fontWeight: 700, color: st.color }}>{st.val ?? "—"}</Mono>
                     </div>
                   ))}
                 </div>
 
-                {/* Z-Score chart — pass data directly, no second fetch */}
-                <QuantChart symbol={sym} metric="priceZscore" range={rng} label="Z-Score — price vs 30d rolling mean" data={quantData} />
-
-                {/* Rolling Vol chart */}
-                <QuantChart symbol={sym} metric="rollingVol" range={rng} label="Rolling Vol % annualised (30d)" data={quantData} />
-
-                {/* Rolling Sharpe chart */}
-                <QuantChart symbol={sym} metric="rollingSharpe" range={rng} label="Rolling Sharpe Ratio (30d)" data={quantData} />
-
-                {/* Drawdown chart */}
-                <QuantChart symbol={sym} metric="drawdownSeries" range={rng} label="Drawdown % from peak" data={quantData} />
-
-                {/* Rolling Beta vs SPX — fetches benchmark independently */}
+                <QuickPanel label="Z-Score (30d rolling)" series={quantData.priceZscore} dates={dates} color={C.gold} showZero={true} />
+                <QuickPanel label="Rolling Volatility % annualised (30d)" series={quantData.rollingVol} dates={dates} color={C.blue} showZero={false} />
+                <QuickPanel label="Rolling Sharpe Ratio (30d)" series={quantData.rollingSharpe} dates={dates} showZero={true} />
+                <QuickPanel label="Drawdown % from peak" series={quantData.drawdownSeries} dates={dates} color={C.red} showZero={false} />
                 <RollingBetaChart symbol={sym} range={rng} window={30} benchmark="^GSPC" />
               </>
             );
