@@ -188,10 +188,7 @@ function InlineQuant({symbol,metric,range="1y",label}){
     return()=>{cancelled=true;};
   },[symbol,metric,range]);
   if(loading)return<div style={{padding:"12px 0",color:C.textMuted,fontSize:12}}>Loading {label||metric}…</div>;
-  if(!data||data.error){
-    if(symbol==="PORTFOLIO"||symbol==="portfolio")return null;
-    return<div style={{color:C.red,fontSize:12}}>No quant data for {symbol}</div>;
-  }
+  if(!data||data.error){if(symbol==="PORTFOLIO"||symbol==="portfolio")return null;return<div style={{color:C.red,fontSize:12}}>No quant data for {symbol}</div>;}
   if(metric==="rollingSharpe"||metric==="rollingSharpe30")return null;
   if(metric==="distribution")return<DistributionPanel label={label||"Return Distribution"} distribution={data.distribution} id={`iq_${symbol}_${metric}`}/>;
   const series=data[metric];
@@ -399,28 +396,17 @@ export default function App(){
     setQuantLoading(false);
   }
 
-  async function loadRegime(){
-    setRegimeLoading(true);setRegimeError(null);setRegimeData(null);
-    try{
-      const r=await fetch(`${BACKEND}/api/regime`);
-      const d=await r.json();
-      if(d.error)setRegimeError(d.error);
-      else setRegimeData(d);
-    }catch(e){setRegimeError(e.message);}
-    setRegimeLoading(false);
-  }
-
   async function loadSymbolNews(sym){
     if(!sym)return;
     setNewsLoading(true);setSymbolNews([]);
-    try{
-      const r=await fetch(`${BACKEND}/api/news/symbol/${encodeURIComponent(sym)}?limit=5`);
-      const d=await r.json();
-      setSymbolNews(d.news||[]);
-    }catch{}
+    try{const r=await fetch(`${BACKEND}/api/news/symbol/${encodeURIComponent(sym)}?limit=5`);const d=await r.json();setSymbolNews(d.news||[]);}catch{}
     setNewsLoading(false);
   }
-
+  async function loadRegime(){
+    setRegimeLoading(true);setRegimeError(null);setRegimeData(null);
+    try{const r=await fetch(`${BACKEND}/api/regime`);const d=await r.json();if(d.error)setRegimeError(d.error);else setRegimeData(d);}catch(e){setRegimeError(e.message);}
+    setRegimeLoading(false);
+  }
   async function sendMessage(){
     if(!input.trim()||loading)return;
     const text=input.trim();
@@ -692,23 +678,18 @@ export default function App(){
             </Card>
           )}
 
-          {/* Symbol headlines */}
           {(newsLoading||symbolNews.length>0)&&(
             <div style={{marginTop:12,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px"}}>
               <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>📰 Latest Headlines</div>
               {newsLoading&&<div style={{fontSize:12,color:C.textMuted}}>Loading…</div>}
               {symbolNews.map((n,i)=>(
                 <div key={i} style={{marginBottom:i<symbolNews.length-1?10:0,paddingBottom:i<symbolNews.length-1?10:0,borderBottom:i<symbolNews.length-1?`1px solid ${C.border}`:"none"}}>
-                  <a href={n.link||"#"} target="_blank" rel="noopener noreferrer"
-                    style={{fontSize:13,color:C.textPrimary,textDecoration:"none",lineHeight:1.45,display:"block"}}>{n.title}</a>
-                  <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>
-                    {n.publisher}{n.published?` · ${new Date(n.published).toLocaleDateString()}`:""}
-                  </div>
+                  <a href={n.link||"#"} target="_blank" rel="noopener noreferrer" style={{fontSize:13,color:C.textPrimary,textDecoration:"none",lineHeight:1.45,display:"block"}}>{n.title}</a>
+                  <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>{n.publisher}{n.published?` · ${new Date(n.published).toLocaleDateString()}`:""}</div>
                 </div>
               ))}
             </div>
           )}
-
           {/* Quant panels */}
           {quantLoading&&<div style={{color:C.textMuted,fontSize:12,textAlign:"center",padding:"16px 0"}}>⏳ Computing Z-score, volatility, Sharpe, drawdown…</div>}
           {quantData&&!quantLoading&&(()=>{
@@ -770,82 +751,63 @@ export default function App(){
       {/* ══ REGIME ════════════════════════════════════════════════ */}
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
-          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
-            Market Regime Detection · 2-state Gaussian HMM · VIX + OVX + HYG (5Y)
-          </div>
-
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · 2-state HMM · VIX + OVX + HYG (5Y)</div>
           {!regimeData&&!regimeLoading&&!regimeError&&(
-            <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>
-              🔴 Run HMM Regime Detection
-            </button>
+            <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>🔴 Run HMM Regime Detection</button>
           )}
-
           {regimeLoading&&(
             <div style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:28,marginBottom:12}}>⏳</div>
               <div style={{color:C.textMuted,fontSize:14,fontWeight:600}}>Fitting HMM model…</div>
-              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX · OVX · HYG<br/>Running Baum-Welch EM (100 iterations)<br/>Takes ~20 seconds</div>
+              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX · OVX · HYG<br/>Running Baum-Welch EM (100 iters)<br/>~20 seconds</div>
             </div>
           )}
-
           {regimeError&&(
             <div style={{background:"#2A1A1A",border:`1px solid ${C.red}44`,borderRadius:12,padding:16,marginBottom:12}}>
-              <div style={{color:C.red,fontWeight:600,marginBottom:6}}>❌ Model error</div>
+              <div style={{color:C.red,fontWeight:600,marginBottom:6}}>❌ Error</div>
               <div style={{color:C.textMuted,fontSize:12,fontFamily:C.mono}}>{regimeError}</div>
               <button onClick={loadRegime} style={{marginTop:12,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 16px",color:C.textMuted,fontSize:13,cursor:"pointer"}}>↻ Retry</button>
             </div>
           )}
-
           {regimeData&&!regimeLoading&&(()=>{
-            const {portfolioIndex,normalStats,stressStats,normalDist,stressDist,
-                   currentRegime,currentStressProb,currentVix,stressProbs,
-                   normalDays,stressDays,featureDays,stateMeans,transitionMatrix,method}=regimeData;
+            const{portfolioIndex,normalStats,stressStats,normalDist,stressDist,currentRegime,currentStressProb,currentVix,stressProbFull,normalDays,stressDays,featureDays,stateMeans,method}=regimeData;
             const isStress=currentRegime===1;
             const stressPct=currentStressProb!==null?(currentStressProb*100).toFixed(1):"—";
-
-            // ── Current regime banner ──────────────────────────────
             return(<>
+              {/* Banner */}
               <div style={{background:isStress?"#2A1A1A":"#1A2A1A",border:`2px solid ${isStress?C.red:C.green}`,borderRadius:14,padding:"14px 18px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Current Market Regime</div>
+                  <div style={{fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Current Regime</div>
                   <div style={{fontSize:22,fontWeight:800,color:isStress?C.red:C.green}}>{isStress?"🔴 STRESS":"🟢 NORMAL"}</div>
                   <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)}</Mono> · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
-                  <div style={{fontSize:11,color:C.textDim,marginTop:3}}>Normal: {normalDays}d · Stress: {stressDays}d · Total: {featureDays}d</div>
+                  <div style={{fontSize:11,color:C.textDim,marginTop:3}}>Normal: {normalDays}d · Stress: {stressDays}d (last 1Y)</div>
                 </div>
-                {/* Circular gauge */}
                 <svg viewBox="0 0 70 70" style={{width:70,height:70,flexShrink:0}}>
                   <circle cx="35" cy="35" r="28" fill="none" stroke={C.border} strokeWidth="7"/>
                   <circle cx="35" cy="35" r="28" fill="none" stroke={isStress?C.red:C.green} strokeWidth="7"
-                    strokeDasharray={`${(currentStressProb||0)*175.9} 175.9`}
-                    strokeLinecap="round" transform="rotate(-90 35 35)"/>
+                    strokeDasharray={`${(currentStressProb||0)*175.9} 175.9`} strokeLinecap="round" transform="rotate(-90 35 35)"/>
                   <text x="35" y="38" textAnchor="middle" style={{fontSize:12,fontWeight:700,fill:isStress?C.red:C.green,fontFamily:C.mono}}>{stressPct}%</text>
                 </svg>
               </div>
 
-              {/* ── Panel 1: Portfolio + regime shading ───────────── */}
+              {/* Panel 1: Portfolio 1Y with regime shading */}
               {portfolioIndex?.length>0&&(()=>{
                 const vals=portfolioIndex.map(p=>p.value);
                 const ticks=yTicks(Math.min(...vals),Math.max(...vals));
                 const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
                 const W=300,H=160,Y=38,P=6;
                 const toY=v=>H-((v-lo)/vr)*(H-P*2)-P;
-                const toX=i=>Y+(i/(portfolioIndex.length-1))*W;
-                // Build contiguous stress segments for shading
+                const toX=i=>Y+(i/Math.max(portfolioIndex.length-1,1))*W;
                 const segs=[];let ss=null;
-                portfolioIndex.forEach((p,i)=>{
-                  if(p.regime===1&&ss===null)ss=i;
-                  if(p.regime!==1&&ss!==null){segs.push([ss,i-1]);ss=null;}
-                });
+                portfolioIndex.forEach((p,i)=>{if(p.regime===1&&ss===null)ss=i;if(p.regime!==1&&ss!==null){segs.push([ss,i-1]);ss=null;}});
                 if(ss!==null)segs.push([ss,portfolioIndex.length-1]);
                 const pts=portfolioIndex.map((p,i)=>`${toX(i).toFixed(1)},${toY(p.value).toFixed(1)}`).join(" ");
-
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700}}>Portfolio Value</div>
-                        <div style={{fontSize:10,color:C.textMuted,marginTop:2}}><span style={{color:C.green}}>▬</span> Normal &nbsp;<span style={{color:C.red}}>▬</span> Stress regime</div>
-                      </div>
+                    <div style={{marginBottom:8}}>
+                      <div style={{fontSize:13,fontWeight:700}}>Portfolio Value — Last 1Y</div>
+                      <div style={{fontSize:10,color:C.textMuted,marginTop:2}}><span style={{color:C.green}}>▬</span> Normal &nbsp;<span style={{color:C.red}}>▬</span> Stress</div>
+                    </div>
                     <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
                       <defs>
                         <linearGradient id="rgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.gold} stopOpacity="0.2"/><stop offset="100%" stopColor={C.gold} stopOpacity="0"/></linearGradient>
@@ -865,70 +827,63 @@ export default function App(){
                 );
               })()}
 
-              {/* ── Panel 2: Stress probability series ────────────── */}
-              {regimeData.stressProbFull?.length>0&&(()=>{
-                const spFull=regimeData.stressProbFull;
+              {/* Panel 2: Stress probability 5Y */}
+              {stressProbFull?.length>0&&(()=>{
                 const W=300,H=100,Y=38,P=6;
                 const toY=v=>H-v*(H-P*2)-P;
-                const toX=i=>Y+(i/Math.max(spFull.length-1,1))*W;
-                const pts=spFull.map((s,i)=>`${toX(i).toFixed(1)},${toY(s.prob).toFixed(1)}`).join(" ");
+                const toX=i=>Y+(i/Math.max(stressProbFull.length-1,1))*W;
+                const pts=stressProbFull.map((s,i)=>`${toX(i).toFixed(1)},${toY(s.prob).toFixed(1)}`).join(" ");
                 const zeroY=toY(0.5);
                 const aboveSegs=[];let as_=null;
-                spFull.forEach((s,i)=>{
-                  if(s.prob>0.5&&as_===null)as_=i;
-                  if(s.prob<=0.5&&as_!==null){aboveSegs.push([as_,i-1]);as_=null;}
-                });
-                if(as_!==null)aboveSegs.push([as_,spFull.length-1]);
+                stressProbFull.forEach((s,i)=>{if(s.prob>0.5&&as_===null)as_=i;if(s.prob<=0.5&&as_!==null){aboveSegs.push([as_,i-1]);as_=null;}});
+                if(as_!==null)aboveSegs.push([as_,stressProbFull.length-1]);
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
-                    <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(regime=stress) — 5Y</div>
+                    <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(stress) — 5Y</div>
                     <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
                       <defs><clipPath id="spClip"><rect x={Y} y={0} width={W} height={H}/></clipPath></defs>
                       {[0,0.25,0.5,0.75,1.0].map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={t===0.5?C.textMuted:C.border} strokeWidth={t===0.5?"1.5":"1"} strokeDasharray={t===0.5?"5,3":"3,4"} opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{t.toFixed(2)}</text></g>);})}
                       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-                      {aboveSegs.map(([s,e],i)=>{
-                        const segPts=spFull.slice(s,e+1).map((sp,j)=>`${toX(s+j).toFixed(1)},${toY(sp.prob).toFixed(1)}`).join(" ");
-                        return<polygon key={i} points={`${toX(s)},${zeroY} ${segPts} ${toX(e)},${zeroY}`} fill={C.red} opacity="0.3" clipPath="url(#spClip)"/>;
-                      })}
+                      {aboveSegs.map(([s,e],i)=>{const segPts=stressProbFull.slice(s,e+1).map((sp,j)=>`${toX(s+j).toFixed(1)},${toY(sp.prob).toFixed(1)}`).join(" ");return<polygon key={i} points={`${toX(s)},${zeroY} ${segPts} ${toX(e)},${zeroY}`} fill={C.red} opacity="0.3" clipPath="url(#spClip)"/>;})}
                       <polyline points={pts} fill="none" stroke={C.red} strokeWidth="1.5" clipPath="url(#spClip)"/>
                     </svg>
                     <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-                      <span style={{fontSize:9,color:C.textDim}}>{spFull[0]?.date}</span>
-                      <span style={{fontSize:9,color:C.textDim}}>{spFull[spFull.length-1]?.date}</span>
+                      <span style={{fontSize:9,color:C.textDim}}>{stressProbFull[0]?.date}</span>
+                      <span style={{fontSize:9,color:C.textDim}}>{stressProbFull[stressProbFull.length-1]?.date}</span>
                     </div>
                   </Card>
                 );
               })()}
 
-              {/* ── Panel 3: Regime stats + distributions ─────────── */}
+              {/* Panel 3: Regime stats */}
               {normalStats&&stressStats&&(
                 <Card style={{padding:"12px 14px 10px"}}>
-                  <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>Regime Statistics</div>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>Regime Statistics — Last 1Y</div>
                   {[
-                    {label:"Ann. Return",    n:`${normalStats.annualizedRetPct>=0?"+":""}${normalStats.annualizedRetPct}%`, s:`${stressStats.annualizedRetPct>=0?"+":""}${stressStats.annualizedRetPct}%`},
-                    {label:"Ann. Volatility",n:`${normalStats.annualizedVolPct}%`,                                          s:`${stressStats.annualizedVolPct}%`},
-                    {label:"Daily Vol",      n:`${normalStats.dailyVolPct}%`,                                               s:`${stressStats.dailyVolPct}%`},
-                    {label:"VaR 95%",        n:normalStats.var95Pct!==null?`${normalStats.var95Pct}%`:"—",                 s:stressStats.var95Pct!==null?`${stressStats.var95Pct}%`:"—"},
-                    {label:"CVaR 95%",       n:normalStats.cvar95Pct!==null?`${normalStats.cvar95Pct}%`:"—",               s:stressStats.cvar95Pct!==null?`${stressStats.cvar95Pct}%`:"—"},
-                    {label:"Avg Drawdown",   n:`${normalStats.avgDrawdownPct}%`,                                            s:`${stressStats.avgDrawdownPct}%`},
-                    {label:"Max Drawdown",   n:`${normalStats.maxDrawdownPct}%`,                                            s:`${stressStats.maxDrawdownPct}%`},
-                    {label:"Sharpe",         n:normalStats.sharpe??'—',                                                     s:stressStats.sharpe??'—'},
-                    {label:"Days (1Y)",      n:normalDays,                                                                  s:stressDays},
+                    {label:"Ann. Return",  n:`${normalStats.annualizedRetPct>=0?"+":""}${normalStats.annualizedRetPct}%`, s:`${stressStats.annualizedRetPct>=0?"+":""}${stressStats.annualizedRetPct}%`},
+                    {label:"Ann. Vol",     n:`${normalStats.annualizedVolPct}%`, s:`${stressStats.annualizedVolPct}%`},
+                    {label:"Daily Vol",    n:`${normalStats.dailyVolPct}%`,      s:`${stressStats.dailyVolPct}%`},
+                    {label:"VaR 95%",      n:normalStats.var95Pct!==null?`${normalStats.var95Pct}%`:"—", s:stressStats.var95Pct!==null?`${stressStats.var95Pct}%`:"—"},
+                    {label:"CVaR 95%",     n:normalStats.cvar95Pct!==null?`${normalStats.cvar95Pct}%`:"—", s:stressStats.cvar95Pct!==null?`${stressStats.cvar95Pct}%`:"—"},
+                    {label:"Avg Drawdown", n:`${normalStats.avgDrawdownPct}%`,   s:`${stressStats.avgDrawdownPct}%`},
+                    {label:"Max Drawdown", n:`${normalStats.maxDrawdownPct}%`,   s:`${stressStats.maxDrawdownPct}%`},
+                    {label:"Sharpe",       n:normalStats.sharpe??'—',            s:stressStats.sharpe??'—'},
+                    {label:"Days",         n:normalDays,                         s:stressDays},
                   ].map(row=>(
                     <div key={row.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:`1px solid ${C.border}`}}>
                       <span style={{fontSize:11,color:C.textMuted,width:90}}>{row.label}</span>
-                      <span style={{fontSize:12,fontWeight:600,color:C.green,fontFamily:C.mono,width:80,textAlign:"center"}}>{row.n}</span>
-                      <span style={{fontSize:12,fontWeight:600,color:C.red,fontFamily:C.mono,width:80,textAlign:"center"}}>{row.s}</span>
+                      <Mono style={{fontSize:12,fontWeight:600,color:C.green,width:80,textAlign:"center"}}>{row.n}</Mono>
+                      <Mono style={{fontSize:12,fontWeight:600,color:C.red,width:80,textAlign:"center"}}>{row.s}</Mono>
                     </div>
                   ))}
-                  <div style={{display:"flex",justifyContent:"space-around",marginTop:6,paddingTop:4}}>
+                  <div style={{display:"flex",justifyContent:"space-around",marginTop:8}}>
                     <span style={{fontSize:10,color:C.green,fontWeight:700}}>🟢 NORMAL</span>
                     <span style={{fontSize:10,color:C.red,fontWeight:700}}>🔴 STRESS</span>
                   </div>
                 </Card>
               )}
 
-              {/* ── Return distributions ──────────────────────────── */}
+              {/* Panel 4: Distributions */}
               {normalDist?.length>0&&stressDist?.length>0&&(()=>{
                 const DistChart=({dist,col,label,stats})=>{
                   if(!dist?.length)return null;
@@ -939,13 +894,7 @@ export default function App(){
                     <div style={{background:C.surfaceHigh,border:`1px solid ${col}33`,borderRadius:12,padding:"12px 12px 8px",marginBottom:10}}>
                       <div style={{fontSize:12,fontWeight:700,color:col,marginBottom:6}}>{label}</div>
                       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:8}}>
-                        {[
-                          {k:"Ann Vol",v:stats?.annualizedVolPct+"%" },
-                          {k:"VaR 95",v:stats?.var95Pct+"%" },
-                          {k:"CVaR 95",v:stats?.cvar95Pct+"%" },
-                          {k:"Avg DD",v:stats?.avgDrawdownPct+"%" },
-                          {k:"Sharpe",v:stats?.sharpe??'—' },
-                        ].map(m=>(
+                        {[{k:"Ann Vol",v:stats?.annualizedVolPct+"%"},{k:"VaR 95",v:stats?.var95Pct+"%"},{k:"CVaR 95",v:stats?.cvar95Pct+"%"},{k:"Avg DD",v:stats?.avgDrawdownPct+"%"},{k:"Sharpe",v:stats?.sharpe??'—'}].map(m=>(
                           <div key={m.k} style={{textAlign:"center"}}>
                             <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase"}}>{m.k}</div>
                             <Mono style={{fontSize:12,fontWeight:700,color:col}}>{m.v}</Mono>
@@ -960,30 +909,30 @@ export default function App(){
                       </svg>
                       <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
                         <span style={{fontSize:8,color:C.textDim}}>{dist[0]?.binStart}%</span>
-                        <span style={{fontSize:8,color:C.textDim,textAlign:"center"}}>daily return</span>
+                        <span style={{fontSize:8,color:C.textDim}}>daily return</span>
                         <span style={{fontSize:8,color:C.textDim}}>{dist[dist.length-1]?.binEnd}%</span>
                       </div>
                     </div>
                   );
                 };
                 return(<>
-                  <DistChart dist={normalDist} col={C.green} label={`🟢 Normal regime — ${normalDays}d (last 1Y)`} stats={normalStats}/>
-                  <DistChart dist={stressDist}  col={C.red}   label={`🔴 Stress regime — ${stressDays}d (last 1Y)`}  stats={stressStats}/>
+                  <DistChart dist={normalDist} col={C.green} label={`🟢 Normal — ${normalDays}d (last 1Y)`} stats={normalStats}/>
+                  <DistChart dist={stressDist}  col={C.red}   label={`🔴 Stress — ${stressDays}d (last 1Y)`}  stats={stressStats}/>
                 </>);
               })()}
 
-              {/* Feature means + transition matrix */}
+              {/* Feature means */}
               {stateMeans&&(
                 <Card style={{padding:"12px 14px 10px"}}>
-                  <div style={{fontSize:12,fontWeight:700,color:C.textMuted,marginBottom:8}}>Feature means by regime</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.textMuted,marginBottom:8}}>Feature means by regime (5Y)</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
                     {["VIX","OVX","HYG_stress"].map(f=>(
                       <div key={f} style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px"}}>
                         <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>{f}</div>
-                        <div style={{display:"flex",gap:10}}>
-                          <Mono style={{fontSize:12,color:C.green}}>{stateMeans[0]?.[f]??'—'}</Mono>
-                          <span style={{fontSize:10,color:C.textDim}}>vs</span>
-                          <Mono style={{fontSize:12,color:C.red}}>{stateMeans[1]?.[f]??'—'}</Mono>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                          <Mono style={{fontSize:11,color:C.green}}>{stateMeans[0]?.[f]??'—'}</Mono>
+                          <span style={{fontSize:9,color:C.textDim}}>vs</span>
+                          <Mono style={{fontSize:11,color:C.red}}>{stateMeans[1]?.[f]??'—'}</Mono>
                         </div>
                       </div>
                     ))}
@@ -1048,13 +997,7 @@ export default function App(){
             </>
           )}
           <button onClick={()=>{loadTasks();loadLog();}} style={{width:"100%",marginTop:8,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:11,color:C.textMuted,fontSize:14,cursor:"pointer"}}>↻ Refresh</button>
-          <button onClick={async()=>{
-            const r=await fetch(`${BACKEND}/api/email/report`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
-            const d=await r.json();
-            alert(d.ok?"✅ Email sent!":"❌ Failed: "+(d.error||d.reason||JSON.stringify(d)));
-          }} style={{width:"100%",marginTop:8,background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:10,padding:11,color:C.goldText,fontSize:14,cursor:"pointer",fontWeight:600}}>
-            📧 Send Portfolio Report Email Now
-          </button>
+          <button onClick={async()=>{const r=await fetch(`${BACKEND}/api/email/report`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});const d=await r.json();alert(d.ok?"✅ Email sent!":"❌ "+(d.error||d.reason||"Failed"));}} style={{width:"100%",marginTop:8,background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:10,padding:11,color:C.goldText,fontSize:14,cursor:"pointer",fontWeight:600}}>📧 Send Portfolio Report Email Now</button>
         </div>
       )}
 
