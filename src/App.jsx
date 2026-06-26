@@ -15,6 +15,19 @@ const Mono=({children,style={}})=><span style={{fontFamily:C.mono,...style}}>{ch
 const Card=({children,style={}})=><div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:10,...style}}>{children}</div>;
 function PnlText({value,style={}}){const v=parseFloat(value||0);if(v===0)return<Mono style={{color:C.textMuted,...style}}>—</Mono>;return<Mono style={{color:v>=0?C.green:C.red,fontWeight:600,...style}}>{v>=0?"+":""}€{Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</Mono>;}
 function AllocationBar({pct}){return<div style={{height:4,background:C.border,borderRadius:2,marginTop:6,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:C.gold,borderRadius:2}}/></div>;}
+function ExpandableChart({title="Chart",children}){
+  const [open,setOpen]=useState(false);
+  return <>
+    <div onClick={()=>setOpen(true)} title="Click to expand" style={{cursor:"zoom-in"}}>{children}</div>
+    {open&&<div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.82)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"min(980px,96vw)",maxHeight:"90vh",background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:16,boxShadow:"0 24px 80px rgba(0,0,0,0.45)",cursor:"default"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={{fontWeight:700,color:C.goldText}}>{title}</div><button onClick={()=>setOpen(false)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,color:C.textMuted,borderRadius:8,padding:"6px 10px",cursor:"pointer"}}>Close</button></div>
+        <div style={{height:"min(68vh,620px)",overflow:"hidden"}}>{children}</div>
+      </div>
+    </div>}
+  </>;
+}
+
 
 // ── Y-axis helpers ────────────────────────────────────────────────
 function niceStep(r,t=5){const raw=r/t;const mag=Math.pow(10,Math.floor(Math.log10(raw)));for(const n of[1,2,2.5,5,10])if(n*mag>=raw)return n*mag;return mag*10;}
@@ -35,7 +48,8 @@ function PriceChart({bars,height=160,id="pc"}){
   const toY=v=>H-((v-lo)/vr)*(H-P*2)-P;
   const pts=closes.map((v,i)=>`${Y+(i/(closes.length-1))*W},${toY(v)}`).join(" ");
   return(
-    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height}} preserveAspectRatio="none">
+    <ExpandableChart title="Price chart">
+    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:"100%",minHeight:height}} preserveAspectRatio="none">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={col} stopOpacity="0.25"/>
@@ -48,6 +62,7 @@ function PriceChart({bars,height=160,id="pc"}){
       <polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill={`url(#${id})`} clipPath={`url(#cp_${id})`}/>
       <polyline points={pts} fill="none" stroke={col} strokeWidth="1.8" clipPath={`url(#cp_${id})`}/>
     </svg>
+    </ExpandableChart>
   );
 }
 
@@ -64,7 +79,8 @@ function CandleChart({bars,height=200,id="cc"}){
   const toY=v=>H-((v-lo)/vr)*(H-P*2)-P;
   const cw=Math.max(2,(W/recent.length)-1);
   return(
-    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height}} preserveAspectRatio="none">
+    <ExpandableChart title="Candlestick chart">
+    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:"100%",minHeight:height}} preserveAspectRatio="none">
       {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
       {recent.map((b,i)=>{
@@ -76,6 +92,7 @@ function CandleChart({bars,height=200,id="cc"}){
         return(<g key={i}><line x1={x+cw/2} y1={toY(h)} x2={x+cw/2} y2={toY(l)} stroke={col} strokeWidth="1"/><rect x={x} y={bodyT} width={cw} height={bodyH} fill={col} opacity="0.9"/></g>);
       })}
     </svg>
+    </ExpandableChart>
   );
 }
 
@@ -96,7 +113,8 @@ function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
   const zeroY=(showZero&&lo<0&&hi>0)?toY(0):null;
   const safeId=id.replace(/[^a-zA-Z0-9_-]/g,"_");
   return(
-    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px 8px"}}>
+    <ExpandableChart title={label}>
+    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px 8px"}}> 
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
         <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
         <Mono style={{fontSize:13,fontWeight:700,color:col}}>{last.toFixed(3)}</Mono>
@@ -117,6 +135,7 @@ function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
       </svg>
       {dates&&<div style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span style={{fontSize:9,color:C.textDim}}>{dates[0]}</span><span style={{fontSize:9,color:C.textDim}}>{dates[dates.length-1]}</span></div>}
     </div>
+    </ExpandableChart>
   );
 }
 
@@ -126,7 +145,8 @@ function DistributionPanel({label,distribution,id="dist"}){
   const W=300,H=110,Y=38,P=8;
   const bw=W/distribution.length;
   return(
-    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px 8px"}}>
+    <ExpandableChart title={label}>
+    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px 8px"}}> 
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
         <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
         <Mono style={{fontSize:13,fontWeight:700,color:C.goldText}}>{distribution.reduce((s,b)=>s+(b.count||0),0)} obs</Mono>
@@ -141,6 +161,7 @@ function DistributionPanel({label,distribution,id="dist"}){
       </svg>
       <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span style={{fontSize:9,color:C.textDim}}>{distribution[0]?.binStart}%</span><span style={{fontSize:9,color:C.textDim}}>Daily return buckets</span><span style={{fontSize:9,color:C.textDim}}>{distribution[distribution.length-1]?.binEnd}%</span></div>
     </div>
+    </ExpandableChart>
   );
 }
 
@@ -251,17 +272,45 @@ function InlineChart({symbol,range="1y"}){
   );
 }
 
+
+function InlinePortfolioChart({range="1y"}){
+  const [data,setData]=useState(null); const [loading,setLoading]=useState(true);
+  useEffect(()=>{let cancelled=false;(async()=>{setLoading(true);try{const r=await fetch(`${BACKEND}/api/portfolio/analytics?range=${encodeURIComponent(range)}`);const d=await r.json();if(!cancelled)setData(d);}catch(e){if(!cancelled)setData({error:e.message});}if(!cancelled)setLoading(false);})();return()=>{cancelled=true};},[range]);
+  if(loading)return <div style={{padding:"12px 0",color:C.textMuted,fontSize:12}}>Reconstructing weighted portfolio…</div>;
+  if(!data||data.error)return <div style={{color:C.red,fontSize:12}}>No portfolio chart data</div>;
+  const bars=(data.dates||[]).map((date,i)=>({date,close:data.portfolioIndex?.[i]})).filter(b=>Number.isFinite(b.close));
+  return <div style={{marginTop:10}}><PriceChart bars={bars} height={180} id="portfolio_inline"/><div style={{fontSize:10,color:C.textDim,marginTop:6}}>Current weights × aligned Yahoo 1Y daily returns. Start index = 100.</div></div>;
+}
+
+function SimpleTable({rows}){
+  if(!rows?.length)return null;
+  const headers=rows[0]; const body=rows.slice(1);
+  return <div style={{overflowX:"auto",margin:"8px 0",border:`1px solid ${C.border}`,borderRadius:10}}><table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
+    <thead><tr>{headers.map((h,i)=><th key={i} style={{textAlign:"left",padding:"7px 8px",background:C.surface,color:C.goldText,borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+    <tbody>{body.map((r,i)=><tr key={i}>{r.map((c,j)=><td key={j} style={{padding:"6px 8px",borderBottom:i<body.length-1?`1px solid ${C.border}`:"none",fontFamily:/^-?\d+(\.\d+)?%?$/.test(c)?C.mono:undefined,whiteSpace:"nowrap"}}>{c}</td>)}</tr>)}</tbody>
+  </table></div>;
+}
+function parseMarkdownTable(txt){
+  const lines=txt.trim().split(/\n/).filter(Boolean);
+  if(lines.length<2||!lines[0].includes("|")||!/^[\s|:-]+$/.test(lines[1]))return null;
+  return lines.filter((_,i)=>i!==1).map(l=>l.trim().replace(/^\||\|$/g,"").split("|").map(x=>x.trim()));
+}
+
 // ── Message content parser ────────────────────────────────────────
 function MessageContent({content}){
   if(!content)return null;
-  const parts=content.split(/(@@(?:CHART|QUANT):[^@]+@@)/g);
-  return<>{parts.map((p,i)=>{
-    const cm=p.match(/^@@CHART:([^:]+):([^@]+)@@$/);
-    if(cm)return<InlineChart key={i} symbol={cm[1]} range={cm[2]}/>;
-    const qm=p.match(/^@@QUANT:([^:]+):([^:]+):([^:]+):([^@]+)@@$/);
-    if(qm)return<InlineQuant key={i} symbol={qm[1]} metric={qm[2]} range={qm[3]} label={qm[4]}/>;
-    if(p)return<span key={i} style={{whiteSpace:"pre-wrap"}}>{p}</span>;
-    return null;
+  const tokenRe=/(@@(?:CHART|QUANT|PORTFOLIO):[^@]+@@)/g;
+  const chunks=content.split(tokenRe);
+  return <>{chunks.map((chunk,i)=>{
+    const cm=chunk.match(/^@@CHART:([^:]+):([^@]+)@@$/);
+    if(cm)return <InlineChart key={i} symbol={cm[1]} range={cm[2]}/>;
+    const qm=chunk.match(/^@@QUANT:([^:]+):([^:]+):([^:]+):([^@]+)@@$/);
+    if(qm)return <InlineQuant key={i} symbol={qm[1]} metric={qm[2]} range={qm[3]} label={qm[4]}/>;
+    const pm=chunk.match(/^@@PORTFOLIO:([^@]+)@@$/);
+    if(pm)return <InlinePortfolioChart key={i} range={pm[1]}/>;
+    if(!chunk)return null;
+    const blocks=chunk.split(/(\n\s*\|[^\n]+\|\s*\n\s*\|[\s|:-]+\|[\s\S]*?(?=\n\n|$))/g);
+    return <span key={i}>{blocks.map((b,j)=>{const tbl=parseMarkdownTable(b);return tbl?<SimpleTable key={j} rows={tbl}/>:<span key={j} style={{whiteSpace:"pre-wrap"}}>{b}</span>;})}</span>;
   })}</>;
 }
 
@@ -421,7 +470,7 @@ export default function App(){
           <div style={{flex:1,overflowY:"auto",padding:16}}>
             <PushBanner/>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
-              {["Morning market brief","Combined portfolio","Show CNDX.L chart","Portfolio risk metrics","Latest market news","Rolling VaR CSPX.L"].map(q=>(
+              {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
               ))}
             </div>
@@ -498,6 +547,8 @@ export default function App(){
                         ))}
                       </div>
                       <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe = annualized return / covariance-based annualized vol; benchmark = SPX.</div>
+                      {combined.metrics1Y.portfolioIndex&&<QuantPanel label="Portfolio rolling Sharpe ratio (30d)" series={combined.metrics1Y.rollingSharpe30} dates={combined.metrics1Y.dates} showZero={true} id="pf_roll_sharpe"/>}
+                      {combined.metrics1Y.portfolioIndex&&<div style={{marginBottom:12}}><PriceChart bars={combined.metrics1Y.dates.map((date,i)=>({date,close:combined.metrics1Y.portfolioIndex[i]}))} height={170} id="pf_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>Reconstructed portfolio index from current weights. Start = 100.</div></div>}
                     </>
                   )}
                   <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Positions — combined allocation</div>
