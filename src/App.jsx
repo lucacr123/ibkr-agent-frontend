@@ -759,7 +759,7 @@ export default function App(){
             <div style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:28,marginBottom:12}}>⏳</div>
               <div style={{color:C.textMuted,fontSize:14,fontWeight:600}}>Fitting HMM model…</div>
-              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX · OVX · HYG<br/>Running Baum-Welch EM (100 iters)<br/>~20 seconds</div>
+              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX · OVX · XTC5 (Xtrackers iTraxx)<br/>Running Baum-Welch EM (100 iters)<br/>~20 seconds</div>
             </div>
           )}
           {regimeError&&(
