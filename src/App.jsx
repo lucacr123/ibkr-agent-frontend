@@ -784,7 +784,7 @@ export default function App(){
             <div style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:28,marginBottom:12}}>⏳</div>
               <div style={{color:C.textMuted,fontSize:14,fontWeight:600}}>Fitting HMM model…</div>
-              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching VIX · OVX · HYG · TNX<br/>Running Baum-Welch EM (100 iterations)<br/>Takes ~20 seconds</div>
+              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX · OVX · HYG<br/>Running walk-forward HMM (252d windows)<br/>Takes ~30 seconds</div>
             </div>
           )}
 
@@ -979,7 +979,7 @@ export default function App(){
                 <Card style={{padding:"12px 14px 10px"}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.textMuted,marginBottom:8}}>Feature means by regime</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    {["VIX","OVX","HYG_stress","TNX_vol"].map(f=>(
+                    {["VIX","OVX","HYG_stress"].map(f=>(
                       <div key={f} style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px"}}>
                         <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>{f}</div>
                         <div style={{display:"flex",gap:10}}>
