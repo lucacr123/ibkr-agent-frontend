@@ -1,33 +1,33 @@
-// IBKR Agent — Service Worker
-// Receives push notifications even when the app is closed
+// IBKR Agent Service Worker v2
+// Handles push notifications in background
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(clients.claim()));
 
 self.addEventListener("push", e => {
   let data = { title: "IBKR Agent", body: "New update", icon: "📈" };
-  try { if (e.data) data = { ...data, ...e.data.json() }; } catch (_) {}
+  try { if (e.data) data = { ...data, ...e.data.json() }; } catch {}
 
-  e.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: "/icon-192.png",
-      badge: "/badge-72.png",
-      tag: data.data?.type || "ibkr",
-      renotify: true,
-      vibrate: [100, 50, 100],
-      data: data.data || {},
-      actions: [
-        { action: "open", title: "Open" },
-        { action: "dismiss", title: "Dismiss" },
-      ],
-    })
-  );
+  const options = {
+    body: data.body,
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: "ibkr-" + (data.data?.type || "general"),
+    renotify: true,
+    requireInteraction: false,
+    silent: false,
+    vibrate: [200, 100, 200],
+    data: data.data || {},
+    timestamp: data.timestamp || Date.now(),
+  };
+
+  console.log("[SW] Push received:", data.title, data.body);
+  e.waitUntil(self.registration.showNotification(data.title, options));
 });
 
 self.addEventListener("notificationclick", e => {
+  console.log("[SW] Notification clicked:", e.notification.tag);
   e.notification.close();
-  if (e.action === "dismiss") return;
   e.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
       for (const c of list) {

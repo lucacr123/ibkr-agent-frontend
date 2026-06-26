@@ -188,7 +188,10 @@ function InlineQuant({symbol,metric,range="1y",label}){
     return()=>{cancelled=true;};
   },[symbol,metric,range]);
   if(loading)return<div style={{padding:"12px 0",color:C.textMuted,fontSize:12}}>Loading {label||metric}…</div>;
-  if(!data||data.error)return<div style={{color:C.red,fontSize:12}}>No quant data for {symbol}</div>;
+  if(!data||data.error){
+    if(symbol==="PORTFOLIO")return null; // Portfolio chart handled separately
+    return<div style={{color:C.red,fontSize:12}}>No quant data for {symbol}</div>;
+  }
   if(metric==="distribution")return<DistributionPanel label={label||"Return Distribution"} distribution={data.distribution} id={`iq_${symbol}_${metric}`}/>;
   const series=data[metric];
   const showZero=!["rollingVol","rollingVaR95","rollingVaR99"].includes(metric);
@@ -339,6 +342,9 @@ export default function App(){
   // Quant
   const [quantData,setQuantData]=useState(null);
   const [quantLoading,setQuantLoading]=useState(false);
+  // Symbol news
+  const [symbolNews,setSymbolNews]=useState([]);
+  const [newsLoading,setNewsLoading]=useState(false);
   const chatEndRef=useRef(null);
 
   useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
@@ -365,6 +371,7 @@ export default function App(){
       const d=await r.json();
       setChartData(d);setChartSymbol(sym);
       loadQuantData(sym,range);
+      loadSymbolNews(sym);
     }catch{}
     setChartLoading(false);
   }
@@ -385,6 +392,17 @@ export default function App(){
       }
     }catch(e){console.error("quant error:",e);}
     setQuantLoading(false);
+  }
+
+  async function loadSymbolNews(sym){
+    if(!sym)return;
+    setNewsLoading(true);setSymbolNews([]);
+    try{
+      const r=await fetch(`${BACKEND}/api/news/symbol/${encodeURIComponent(sym)}?limit=5`);
+      const d=await r.json();
+      setSymbolNews(d.news||[]);
+    }catch{}
+    setNewsLoading(false);
   }
 
   async function sendMessage(){
@@ -658,8 +676,22 @@ export default function App(){
             </Card>
           )}
 
+          {/* Symbol news headlines */}
+          {(newsLoading||(symbolNews.length>0))&&(
+            <div style={{marginTop:12,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px"}}>
+              <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>📰 Latest Headlines</div>
+              {newsLoading&&<div style={{fontSize:12,color:C.textMuted}}>Loading news…</div>}
+              {symbolNews.map((n,i)=>(
+                <div key={i} style={{marginBottom:i<symbolNews.length-1?10:0,paddingBottom:i<symbolNews.length-1?10:0,borderBottom:i<symbolNews.length-1?`1px solid ${C.border}`:"none"}}>
+                  <a href={n.link} target="_blank" rel="noopener noreferrer" style={{fontSize:13,color:C.textPrimary,textDecoration:"none",lineHeight:1.4,display:"block"}}>{n.title}</a>
+                  <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>{n.publisher} {n.published?`· ${new Date(n.published).toLocaleDateString()}`:""}}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Quant panels */}
-          {quantLoading&&<div style={{color:C.textMuted,fontSize:12,textAlign:"center",padding:"16px 0"}}>⏳ Computing Z-score, volatility, Sharpe, drawdown…</div>}
+          {quantLoading&&<div style={{color:C.textMuted,fontSize:12,textAlign:"center",padding:"16px 0"}}>⏳ Computing Z-score, volatility, drawdown…</div>}
           {quantData&&!quantLoading&&(()=>{
             const s=quantData.summary||{};
             const dates=quantData.dates;
@@ -689,7 +721,7 @@ export default function App(){
                 <QuantPanel label="Rolling Volatility % ann. (30d)" series={quantData.rollingVol} dates={dates} color={C.blue} showZero={false} id="q_vol"/>
                 <QuantPanel label="Rolling VaR 95% (30d)" series={quantData.rollingVaR95} dates={dates} color={C.red} showZero={false} id="q_var95"/>
                 <QuantPanel label="Rolling VaR 99% (30d)" series={quantData.rollingVaR99} dates={dates} color={C.red} showZero={false} id="q_var99"/>
-                <QuantPanel label="Rolling Sharpe Ratio (30d)" series={quantData.rollingSharpe} dates={dates} showZero={true} id="q_sharpe"/>
+                {/* Rolling Sharpe removed — use Z-score for momentum signal */}
                 <QuantPanel label="Drawdown % from peak" series={quantData.drawdownSeries} dates={dates} color={C.red} showZero={false} id="q_dd"/>
                 
               </>
