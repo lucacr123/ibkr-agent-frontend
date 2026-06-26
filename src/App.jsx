@@ -8,7 +8,7 @@ const C = {
   mono:"'JetBrains Mono','Fira Mono',monospace",
 };
 const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
-const YF = { CSPX:"CSPX.L",CSNDX:"CNDX.SW",CSSX5E:"CSSX5E.SW",IEEM:"IEEM.L",IUSE:"IUSE.L",NQSE:"NQSE.DE",VUAG:"VUAG.L",VWRL:"VWRL.L",VFEM:"VFEM.L" };
+const YF = { CSPX:"CSPX.L",CSNDX:"CNDX.L",CSSX5E:"CSSX5E.SW",IEEM:"IEEM.L",IUSE:"IUSE.L",NQSE:"NQSE.DE",SPCX:"SPCX.L",VUAG:"VUAG.L",VWRL:"VWRL.L",VFEM:"VFEM.L" };
 
 function b64ToUint8(b){const pad="=".repeat((4-b.length%4)%4);const raw=atob((b+pad).replace(/-/g,"+").replace(/_/g,"/"));return new Uint8Array([...raw].map(c=>c.charCodeAt(0)));}
 const Mono=({children,style={}})=><span style={{fontFamily:C.mono,...style}}>{children}</span>;
@@ -421,7 +421,7 @@ export default function App(){
           <div style={{flex:1,overflowY:"auto",padding:16}}>
             <PushBanner/>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
-              {["Combined portfolio","Show CSPX.L chart","All holdings quotes","P&L summary","VaR CSPX.L","Return distribution CSPX.L","Rolling VaR CSPX.L"].map(q=>(
+              {["Morning market brief","Combined portfolio","Show CNDX.L chart","Portfolio risk metrics","Latest market news","Rolling VaR CSPX.L"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
               ))}
             </div>
@@ -474,6 +474,31 @@ export default function App(){
                       </Card>
                     ))}
                   </div>
+
+                  {combined.metrics1Y&&(
+                    <>
+                      <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 0 8px"}}>1Y portfolio risk metrics</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:14}}>
+                        {[
+                          {label:"Sharpe",val:combined.metrics1Y.sharpe?.toFixed(2),color:combined.metrics1Y.sharpe>1?C.green:combined.metrics1Y.sharpe<0?C.red:C.amber},
+                          {label:"Max DD",val:combined.metrics1Y.maxDrawdownPct!==null&&combined.metrics1Y.maxDrawdownPct!==undefined?combined.metrics1Y.maxDrawdownPct.toFixed(1)+"%":"—",color:C.red},
+                          {label:"VaR 95",val:combined.metrics1Y.var95Pct!==null&&combined.metrics1Y.var95Pct!==undefined?combined.metrics1Y.var95Pct.toFixed(2)+"%":"—",color:C.red},
+                          {label:"Info Ratio",val:combined.metrics1Y.informationRatioVsSPX!==null?combined.metrics1Y.informationRatioVsSPX?.toFixed(2):"—",color:C.blue},
+                          {label:"Avg daily",val:combined.metrics1Y.averageDailyReturnPct!==null&&combined.metrics1Y.averageDailyReturnPct!==undefined?combined.metrics1Y.averageDailyReturnPct.toFixed(3)+"%":"—",color:combined.metrics1Y.averageDailyReturnPct>=0?C.green:C.red},
+                          {label:"Calmar",val:combined.metrics1Y.calmar!==null?combined.metrics1Y.calmar?.toFixed(2):"—",color:C.gold},
+                          {label:"Ann. Vol",val:combined.metrics1Y.annualizedVolPct!==null&&combined.metrics1Y.annualizedVolPct!==undefined?combined.metrics1Y.annualizedVolPct.toFixed(1)+"%":"—",color:C.textPrimary},
+                          {label:"Sortino",val:combined.metrics1Y.sortino?.toFixed(2),color:combined.metrics1Y.sortino>1?C.green:combined.metrics1Y.sortino<0?C.red:C.amber},
+                          {label:"CVaR 95",val:combined.metrics1Y.cvar95Pct!==null&&combined.metrics1Y.cvar95Pct!==undefined?combined.metrics1Y.cvar95Pct.toFixed(2)+"%":"—",color:C.red},
+                        ].map(st=>(
+                          <Card key={st.label} style={{padding:"10px 8px",marginBottom:0,textAlign:"center"}}>
+                            <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{st.label}</div>
+                            <Mono style={{fontSize:13,fontWeight:700,color:st.color}}>{st.val??"—"}</Mono>
+                          </Card>
+                        ))}
+                      </div>
+                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current holding weights × 1Y daily Yahoo returns, compared with SPX.</div>
+                    </>
+                  )}
                   <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Positions — combined allocation</div>
                   {combined.positions.map(p=>(
                     <Card key={p.symbol}>
@@ -591,14 +616,14 @@ export default function App(){
                 {/* Stats */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:7,marginBottom:4,marginTop:8}}>
                   {[
-                    {label:"Z-Score (ret)",val:s.currentReturnZscore?.toFixed(3),color:s.currentReturnZscore>2?C.red:s.currentReturnZscore<-2?C.green:C.gold},
+                    {label:"Z-Score (ret)",val:(s.currentReturnZscore30??s.currentReturnZscore)?.toFixed(3),color:(s.currentReturnZscore30??s.currentReturnZscore)>2?C.red:(s.currentReturnZscore30??s.currentReturnZscore)<-2?C.green:C.gold},
                     {label:"Ann. Vol",val:s.annualizedVol?s.annualizedVol.toFixed(1)+"%":"—",color:C.textPrimary},
                     {label:"VaR 95",val:s.var95!==null&&s.var95!==undefined?s.var95.toFixed(2)+"%":"—",color:C.red},
                     {label:"CVaR 95",val:s.cvar95!==null&&s.cvar95!==undefined?s.cvar95.toFixed(2)+"%":"—",color:C.red},
                     {label:"Sharpe",val:s.sharpe?.toFixed(2),color:s.sharpe>1?C.green:s.sharpe<0?C.red:C.amber},
                     {label:"Skew",val:s.skewness?.toFixed(2),color:s.skewness<0?C.red:C.green},
                     {label:"Kurt",val:s.kurtosis?.toFixed(2),color:C.amber},
-                    {label:"Max DD",val:s.maxDrawdown?s.maxDrawdown.toFixed(1)+"%":"—",color:C.red},
+                    {label:"Max DD",val:s.maxDrawdown!==null&&s.maxDrawdown!==undefined?s.maxDrawdown.toFixed(1)+"%":"—",color:C.red},
                   ].map(st=>(
                     <div key={st.label} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 8px",textAlign:"center"}}>
                       <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{st.label}</div>
@@ -606,7 +631,7 @@ export default function App(){
                     </div>
                   ))}
                 </div>
-                <QuantPanel label="Z-Score (30d rolling)" series={quantData.priceZscore} dates={dates} color={C.gold} showZero={true} id="q_zscore"/>
+                <QuantPanel label="Z-Score of Returns (30d rolling)" series={quantData.priceZscore30||quantData.priceZscore} dates={dates} color={C.gold} showZero={true} id="q_zscore"/>
                 <QuantPanel label="Daily Returns %" series={quantData.returns} dates={dates} showZero={true} id="q_returns"/>
                 <DistributionPanel label="Return Distribution" distribution={quantData.distribution} id="q_dist"/>
                 <QuantPanel label="Rolling Volatility % ann. (30d)" series={quantData.rollingVol} dates={dates} color={C.blue} showZero={false} id="q_vol"/>
@@ -614,7 +639,7 @@ export default function App(){
                 <QuantPanel label="Rolling VaR 99% (30d)" series={quantData.rollingVaR99} dates={dates} color={C.red} showZero={false} id="q_var99"/>
                 <QuantPanel label="Rolling Sharpe Ratio (30d)" series={quantData.rollingSharpe} dates={dates} showZero={true} id="q_sharpe"/>
                 <QuantPanel label="Drawdown % from peak" series={quantData.drawdownSeries} dates={dates} color={C.red} showZero={false} id="q_dd"/>
-                <QuantPanel label="Z-Score of Returns (30d rolling)" series={quantData.priceZscore30} dates={quantData.dates} color={C.blue} showZero={true} id="q_zscore30"/>
+                
               </>
             );
           })()}
