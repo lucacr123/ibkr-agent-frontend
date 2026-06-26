@@ -771,200 +771,232 @@ export default function App(){
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
           <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
-            Market Regime — HMM (VIX + OVX + HYG) · 2-state walk-forward
+            Market Regime Detection · Full-sample Gaussian HMM · VIX + OVX + HYG + TNX vol
           </div>
 
           {!regimeData&&!regimeLoading&&!regimeError&&(
-            <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:16,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>
-              🔴 Run Regime Detection
+            <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>
+              🔴 Run HMM Regime Detection
             </button>
           )}
 
           {regimeLoading&&(
             <div style={{textAlign:"center",padding:"48px 0"}}>
-              <div style={{fontSize:24,marginBottom:12}}>⏳</div>
-              <div style={{color:C.textMuted,fontSize:14}}>Running HMM walk-forward model…</div>
-              <div style={{color:C.textDim,fontSize:12,marginTop:6}}>Fetching VIX, OVX, HYG + fitting 252d rolling windows</div>
-              <div style={{color:C.textDim,fontSize:11,marginTop:4}}>Takes ~20 seconds</div>
+              <div style={{fontSize:28,marginBottom:12}}>⏳</div>
+              <div style={{color:C.textMuted,fontSize:14,fontWeight:600}}>Fitting HMM model…</div>
+              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching VIX · OVX · HYG · TNX<br/>Running Baum-Welch EM (100 iterations)<br/>Takes ~20 seconds</div>
             </div>
           )}
 
           {regimeError&&(
             <div style={{background:"#2A1A1A",border:`1px solid ${C.red}44`,borderRadius:12,padding:16,marginBottom:12}}>
-              <div style={{color:C.red,fontWeight:600,marginBottom:6}}>Error running model</div>
-              <div style={{color:C.textMuted,fontSize:12}}>{regimeError}</div>
-              <button onClick={loadRegime} style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 14px",color:C.textMuted,fontSize:13,cursor:"pointer"}}>Retry</button>
+              <div style={{color:C.red,fontWeight:600,marginBottom:6}}>❌ Model error</div>
+              <div style={{color:C.textMuted,fontSize:12,fontFamily:C.mono}}>{regimeError}</div>
+              <button onClick={loadRegime} style={{marginTop:12,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 16px",color:C.textMuted,fontSize:13,cursor:"pointer"}}>↻ Retry</button>
             </div>
           )}
 
           {regimeData&&!regimeLoading&&(()=>{
-            const {portfolioIndex,normalStats,stressStats,normalDist,stressDist,currentStressProb,currentRegime,currentVix,featureDays,normalDays,stressDays,method}=regimeData;
-
-            // ── Current regime banner ──────────────────────────────
+            const {portfolioIndex,normalStats,stressStats,normalDist,stressDist,
+                   currentRegime,currentStressProb,currentVix,stressProbs,
+                   normalDays,stressDays,featureDays,stateMeans,transitionMatrix,method}=regimeData;
             const isStress=currentRegime===1;
             const stressPct=currentStressProb!==null?(currentStressProb*100).toFixed(1):"—";
-            const bannerBg=isStress?"#2A1A1A":"#1A2A1A";
-            const bannerBorder=isStress?C.red:C.green;
-            const bannerIcon=isStress?"🔴":"🟢";
-            const bannerLabel=isStress?"STRESS REGIME":"NORMAL REGIME";
-            const bannerCol=isStress?C.red:C.green;
 
+            // ── Current regime banner ──────────────────────────────
             return(<>
-              {/* Current regime banner */}
-              <div style={{background:bannerBg,border:`2px solid ${bannerBorder}`,borderRadius:14,padding:"16px 18px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{background:isStress?"#2A1A1A":"#1A2A1A",border:`2px solid ${isStress?C.red:C.green}`,borderRadius:14,padding:"14px 18px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Current Regime</div>
-                  <div style={{fontSize:20,fontWeight:800,color:bannerCol}}>{bannerIcon} {bannerLabel}</div>
-                  <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: {currentVix?.toFixed(1)} · Stress prob: {stressPct}%</div>
+                  <div style={{fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Current Market Regime</div>
+                  <div style={{fontSize:22,fontWeight:800,color:isStress?C.red:C.green}}>{isStress?"🔴 STRESS":"🟢 NORMAL"}</div>
+                  <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)}</Mono> · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
+                  <div style={{fontSize:11,color:C.textDim,marginTop:3}}>Normal: {normalDays}d · Stress: {stressDays}d · Total: {featureDays}d</div>
                 </div>
-                <div style={{textAlign:"right"}}>
-                  {/* Stress probability gauge */}
-                  <div style={{fontSize:11,color:C.textMuted,marginBottom:6}}>P(Stress)</div>
-                  <div style={{width:60,height:60,position:"relative"}}>
-                    <svg viewBox="0 0 60 60" style={{width:60,height:60}}>
-                      <circle cx="30" cy="30" r="24" fill="none" stroke={C.border} strokeWidth="6"/>
-                      <circle cx="30" cy="30" r="24" fill="none" stroke={bannerCol} strokeWidth="6"
-                        strokeDasharray={`${(currentStressProb||0)*150.8} 150.8`}
-                        strokeLinecap="round" transform="rotate(-90 30 30)"/>
-                      <text x="30" y="34" textAnchor="middle" style={{fontSize:11,fontWeight:700,fill:bannerCol,fontFamily:C.mono}}>{stressPct}%</text>
-                    </svg>
-                  </div>
-                </div>
+                {/* Circular gauge */}
+                <svg viewBox="0 0 70 70" style={{width:70,height:70,flexShrink:0}}>
+                  <circle cx="35" cy="35" r="28" fill="none" stroke={C.border} strokeWidth="7"/>
+                  <circle cx="35" cy="35" r="28" fill="none" stroke={isStress?C.red:C.green} strokeWidth="7"
+                    strokeDasharray={`${(currentStressProb||0)*175.9} 175.9`}
+                    strokeLinecap="round" transform="rotate(-90 35 35)"/>
+                  <text x="35" y="38" textAnchor="middle" style={{fontSize:12,fontWeight:700,fill:isStress?C.red:C.green,fontFamily:C.mono}}>{stressPct}%</text>
+                </svg>
               </div>
 
-              {/* Portfolio value with regime shading */}
+              {/* ── Panel 1: Portfolio + regime shading ───────────── */}
               {portfolioIndex?.length>0&&(()=>{
                 const vals=portfolioIndex.map(p=>p.value);
-                const min=Math.min(...vals),max=Math.max(...vals);
-                const ticks=yTicks(min,max);
+                const ticks=yTicks(Math.min(...vals),Math.max(...vals));
                 const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
-                const W=300,H=180,Y=38,P=8;
+                const W=300,H=160,Y=38,P=6;
                 const toY=v=>H-((v-lo)/vr)*(H-P*2)-P;
                 const toX=i=>Y+(i/(portfolioIndex.length-1))*W;
-
-                // Build stress segments for shading
-                const stressSegs=[];
-                let segStart=null;
+                // Build contiguous stress segments for shading
+                const segs=[];let ss=null;
                 portfolioIndex.forEach((p,i)=>{
-                  if(p.regime===1&&segStart===null)segStart=i;
-                  if(p.regime!==1&&segStart!==null){stressSegs.push([segStart,i-1]);segStart=null;}
+                  if(p.regime===1&&ss===null)ss=i;
+                  if(p.regime!==1&&ss!==null){segs.push([ss,i-1]);ss=null;}
                 });
-                if(segStart!==null)stressSegs.push([segStart,portfolioIndex.length-1]);
-
-                const pts=portfolioIndex.map((p,i)=>`${toX(i)},${toY(p.value)}`).join(" ");
-                const first=portfolioIndex[0],last=portfolioIndex[portfolioIndex.length-1];
-                const chg=((last.value-first.value)/first.value*100).toFixed(1);
-
+                if(ss!==null)segs.push([ss,portfolioIndex.length-1]);
+                const pts=portfolioIndex.map((p,i)=>`${toX(i).toFixed(1)},${toY(p.value).toFixed(1)}`).join(" ");
+                const chg=((portfolioIndex[portfolioIndex.length-1].value-portfolioIndex[0].value)/portfolioIndex[0].value*100).toFixed(1);
                 return(
-                  <Card style={{padding:"14px 14px 10px"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                  <Card style={{padding:"12px 14px 8px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                       <div>
-                        <div style={{fontSize:13,fontWeight:700,color:C.textPrimary}}>Portfolio Value · Regime Overlay</div>
-                        <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>
-                          <span style={{color:C.green}}>■</span> Normal &nbsp;
-                          <span style={{color:C.red}}>■</span> Stress
-                        </div>
+                        <div style={{fontSize:13,fontWeight:700}}>Portfolio Value</div>
+                        <div style={{fontSize:10,color:C.textMuted,marginTop:2}}><span style={{color:C.green}}>▬</span> Normal &nbsp;<span style={{color:C.red}}>▬</span> Stress regime</div>
                       </div>
-                      <Mono style={{fontSize:14,fontWeight:700,color:parseFloat(chg)>=0?C.green:C.red}}>{chg>=0?"+":""}{chg}%</Mono>
+                      <Mono style={{fontSize:13,fontWeight:700,color:parseFloat(chg)>=0?C.green:C.red}}>{chg>=0?"+":""}{chg}%</Mono>
                     </div>
                     <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
-                      {/* Stress shading */}
-                      {stressSegs.map(([s,e],i)=>(
-                        <rect key={i} x={toX(s)} y={P} width={toX(e)-toX(s)+1} height={H-P*2} fill={C.red} opacity="0.12"/>
-                      ))}
-                      {/* Y axis */}
+                      <defs>
+                        <linearGradient id="rgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.gold} stopOpacity="0.2"/><stop offset="100%" stopColor={C.gold} stopOpacity="0"/></linearGradient>
+                        <clipPath id="rgClip"><rect x={Y} y={0} width={W} height={H}/></clipPath>
+                      </defs>
+                      {segs.map(([s,e],i)=><rect key={i} x={toX(s)} y={P} width={Math.max(1,toX(e)-toX(s))} height={H-P*2} fill={C.red} opacity="0.18"/>)}
                       {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
                       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-                      <defs>
-                        <linearGradient id="portGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={C.gold} stopOpacity="0.2"/>
-                          <stop offset="100%" stopColor={C.gold} stopOpacity="0"/>
-                        </linearGradient>
-                        <clipPath id="portClip"><rect x={Y} y={0} width={W} height={H}/></clipPath>
-                      </defs>
-                      <polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill="url(#portGrad)" clipPath="url(#portClip)"/>
-                      <polyline points={pts} fill="none" stroke={C.gold} strokeWidth="1.8" clipPath="url(#portClip)"/>
+                      <polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill="url(#rgGrad)" clipPath="url(#rgClip)"/>
+                      <polyline points={pts} fill="none" stroke={C.gold} strokeWidth="1.8" clipPath="url(#rgClip)"/>
                     </svg>
-                    <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
-                      <div style={{fontSize:9,color:C.textDim}}>{portfolioIndex[0]?.date}</div>
-                      <div style={{fontSize:10,color:C.textMuted}}>Normal: {normalDays}d · Stress: {stressDays}d</div>
-                      <div style={{fontSize:9,color:C.textDim}}>{portfolioIndex[portfolioIndex.length-1]?.date}</div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                      <span style={{fontSize:9,color:C.textDim}}>{portfolioIndex[0]?.date}</span>
+                      <span style={{fontSize:9,color:C.textDim}}>{portfolioIndex[portfolioIndex.length-1]?.date}</span>
                     </div>
                   </Card>
                 );
               })()}
 
-              {/* Stats comparison */}
-              {normalStats&&stressStats&&(()=>{
-                const StatBox=({label,normal,stress,suffix=""})=>(
-                  <div style={{marginBottom:8}}>
-                    <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:4}}>{label}</div>
-                    <div style={{display:"flex",gap:8}}>
-                      <div style={{flex:1,background:"#1A2A1A",border:`1px solid ${C.green}44`,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
-                        <div style={{fontSize:9,color:C.green,marginBottom:3}}>NORMAL</div>
-                        <Mono style={{fontSize:14,fontWeight:700,color:C.green}}>{normal}{suffix}</Mono>
-                      </div>
-                      <div style={{flex:1,background:"#2A1A1A",border:`1px solid ${C.red}44`,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
-                        <div style={{fontSize:9,color:C.red,marginBottom:3}}>STRESS</div>
-                        <Mono style={{fontSize:14,fontWeight:700,color:C.red}}>{stress}{suffix}</Mono>
-                      </div>
-                    </div>
-                  </div>
-                );
+              {/* ── Panel 2: Stress probability series ────────────── */}
+              {stressProbs?.length>0&&(()=>{
+                const ticks=[0,0.25,0.5,0.75,1.0];
+                const W=300,H=100,Y=38,P=6;
+                const toY=v=>H-((v-0)/1)*(H-P*2)-P;
+                const toX=i=>Y+(i/(stressProbs.length-1))*W;
+                const pts=stressProbs.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+                const zeroY=toY(0.5);
+                // Fill above 0.5 red
+                const aboveSegs=[];let as_=null;
+                stressProbs.forEach((v,i)=>{
+                  if(v>0.5&&as_===null)as_=i;
+                  if(v<=0.5&&as_!==null){aboveSegs.push([as_,i-1]);as_=null;}
+                });
+                if(as_!==null)aboveSegs.push([as_,stressProbs.length-1]);
                 return(
-                  <Card style={{padding:"14px 14px 10px"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.textPrimary,marginBottom:12}}>Regime Statistics Comparison</div>
-                    <StatBox label="Annualised Return" normal={normalStats.annualizedRetPct>0?"+"+normalStats.annualizedRetPct:normalStats.annualizedRetPct} stress={stressStats.annualizedRetPct>0?"+"+stressStats.annualizedRetPct:stressStats.annualizedRetPct} suffix="%"/>
-                    <StatBox label="Annualised Volatility" normal={normalStats.annualizedVolPct} stress={stressStats.annualizedVolPct} suffix="%"/>
-                    <StatBox label="Daily Volatility" normal={normalStats.dailyVolPct} stress={stressStats.dailyVolPct} suffix="%"/>
-                    <StatBox label="VaR 95%" normal={normalStats.var95Pct??'—'} stress={stressStats.var95Pct??'—'} suffix={normalStats.var95Pct?"%":""}/>
-                    <StatBox label="CVaR 95%" normal={normalStats.cvar95Pct??'—'} stress={stressStats.cvar95Pct??'—'} suffix={normalStats.cvar95Pct?"%":""}/>
-                    <StatBox label="Avg Drawdown" normal={normalStats.avgDrawdownPct} stress={stressStats.avgDrawdownPct} suffix="%"/>
-                    <StatBox label="Max Drawdown" normal={normalStats.maxDrawdownPct} stress={stressStats.maxDrawdownPct} suffix="%"/>
-                    <StatBox label="Sharpe Ratio" normal={normalStats.sharpe??'—'} stress={stressStats.sharpe??'—'}/>
-                    <div style={{fontSize:10,color:C.textDim,marginTop:8}}>Normal: {normalDays} trading days · Stress: {stressDays} days</div>
+                  <Card style={{padding:"12px 14px 8px"}}>
+                    <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(regime=stress)</div>
+                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
+                      <defs><clipPath id="spClip"><rect x={Y} y={0} width={W} height={H}/></clipPath></defs>
+                      {[0,0.25,0.5,0.75,1.0].map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={t===0.5?C.textMuted:C.border} strokeWidth={t===0.5?"1.5":"1"} strokeDasharray={t===0.5?"5,3":"3,4"} opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{t.toFixed(2)}</text></g>);})}
+                      <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
+                      {/* Red fill above 0.5 */}
+                      {aboveSegs.map(([s,e],i)=>{
+                        const segPts=stressProbs.slice(s,e+1).map((v,j)=>`${toX(s+j).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+                        return<polygon key={i} points={`${toX(s)},${zeroY} ${segPts} ${toX(e)},${zeroY}`} fill={C.red} opacity="0.3" clipPath="url(#spClip)"/>;
+                      })}
+                      <polyline points={pts} fill="none" stroke={C.red} strokeWidth="1.5" clipPath="url(#spClip)"/>
+                    </svg>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                      <span style={{fontSize:9,color:C.textDim}}>{regimeData.dates?.[0]}</span>
+                      <span style={{fontSize:9,color:C.textDim}}>{regimeData.dates?.[regimeData.dates.length-1]}</span>
+                    </div>
                   </Card>
                 );
               })()}
 
-              {/* Return distributions side by side */}
+              {/* ── Panel 3: Regime stats + distributions ─────────── */}
+              {normalStats&&stressStats&&(
+                <Card style={{padding:"12px 14px 10px"}}>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>Regime Statistics</div>
+                  {[
+                    {label:"Ann. Return",    n:`${normalStats.annualizedRetPct>=0?"+":""}${normalStats.annualizedRetPct}%`, s:`${stressStats.annualizedRetPct>=0?"+":""}${stressStats.annualizedRetPct}%`},
+                    {label:"Ann. Volatility",n:`${normalStats.annualizedVolPct}%`,                                          s:`${stressStats.annualizedVolPct}%`},
+                    {label:"Daily Vol",      n:`${normalStats.dailyVolPct}%`,                                               s:`${stressStats.dailyVolPct}%`},
+                    {label:"VaR 95%",        n:normalStats.var95Pct!==null?`${normalStats.var95Pct}%`:"—",                 s:stressStats.var95Pct!==null?`${stressStats.var95Pct}%`:"—"},
+                    {label:"CVaR 95%",       n:normalStats.cvar95Pct!==null?`${normalStats.cvar95Pct}%`:"—",               s:stressStats.cvar95Pct!==null?`${stressStats.cvar95Pct}%`:"—"},
+                    {label:"Avg Drawdown",   n:`${normalStats.avgDrawdownPct}%`,                                            s:`${stressStats.avgDrawdownPct}%`},
+                    {label:"Max Drawdown",   n:`${normalStats.maxDrawdownPct}%`,                                            s:`${stressStats.maxDrawdownPct}%`},
+                    {label:"Sharpe",         n:normalStats.sharpe??'—',                                                     s:stressStats.sharpe??'—'},
+                    {label:"Days",           n:normalDays,                                                                  s:stressDays},
+                  ].map(row=>(
+                    <div key={row.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:`1px solid ${C.border}`}}>
+                      <span style={{fontSize:11,color:C.textMuted,width:90}}>{row.label}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:C.green,fontFamily:C.mono,width:80,textAlign:"center"}}>{row.n}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:C.red,fontFamily:C.mono,width:80,textAlign:"center"}}>{row.s}</span>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",justifyContent:"space-around",marginTop:6,paddingTop:4}}>
+                    <span style={{fontSize:10,color:C.green,fontWeight:700}}>🟢 NORMAL</span>
+                    <span style={{fontSize:10,color:C.red,fontWeight:700}}>🔴 STRESS</span>
+                  </div>
+                </Card>
+              )}
+
+              {/* ── Return distributions ──────────────────────────── */}
               {normalDist?.length>0&&stressDist?.length>0&&(()=>{
-                const DistMini=({dist,color,label})=>{
+                const DistChart=({dist,col,label,stats})=>{
                   if(!dist?.length)return null;
                   const maxC=Math.max(...dist.map(b=>b.count||0),1);
-                  const W=130,H=70,P=4;
+                  const W=260,H=90,P=4,Y=30;
                   const bw=W/dist.length;
                   return(
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:10,fontWeight:600,color,marginBottom:6,textAlign:"center"}}>{label}</div>
-                      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
-                        {dist.map((b,i)=>{
-                          const h=((b.count||0)/maxC)*(H-P);
-                          return<rect key={i} x={i*bw+0.5} y={H-P-h} width={Math.max(1,bw-1)} height={h} fill={color} opacity="0.8" rx="1"/>;
+                    <div style={{background:C.surfaceHigh,border:`1px solid ${col}33`,borderRadius:12,padding:"12px 12px 8px",marginBottom:10}}>
+                      <div style={{fontSize:12,fontWeight:700,color:col,marginBottom:6}}>{label}</div>
+                      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:8}}>
+                        {[
+                          {k:"Ann Vol",v:stats?.annualizedVolPct+"%" },
+                          {k:"VaR 95",v:stats?.var95Pct+"%" },
+                          {k:"CVaR 95",v:stats?.cvar95Pct+"%" },
+                          {k:"Avg DD",v:stats?.avgDrawdownPct+"%" },
+                          {k:"Sharpe",v:stats?.sharpe??'—' },
+                        ].map(m=>(
+                          <div key={m.k} style={{textAlign:"center"}}>
+                            <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase"}}>{m.k}</div>
+                            <Mono style={{fontSize:12,fontWeight:700,color:col}}>{m.v}</Mono>
+                          </div>
+                        ))}
+                      </div>
+                      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
+                        {[0,0.5,1].map((p,i)=>{const y=H-P-p*(H-P*2);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,3" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{Math.round(maxC*p)}</text></g>);})}
+                        <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
+                        {dist.map((b,i)=>{const h=((b.count||0)/maxC)*(H-P*2);return<rect key={i} x={Y+i*bw+0.5} y={H-P-h} width={Math.max(1,bw-1)} height={h} fill={col} opacity="0.85" rx="1"/>;
                         })}
-                        <line x1={0} y1={H-P} x2={W} y2={H-P} stroke={C.border} strokeWidth="1"/>
                       </svg>
-                      <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
                         <span style={{fontSize:8,color:C.textDim}}>{dist[0]?.binStart}%</span>
+                        <span style={{fontSize:8,color:C.textDim,textAlign:"center"}}>daily return</span>
                         <span style={{fontSize:8,color:C.textDim}}>{dist[dist.length-1]?.binEnd}%</span>
                       </div>
                     </div>
                   );
                 };
-                return(
-                  <Card style={{padding:"14px 14px 10px"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.textPrimary,marginBottom:12}}>Return Distributions by Regime</div>
-                    <div style={{display:"flex",gap:12}}>
-                      <DistMini dist={normalDist} color={C.green} label="Normal regime"/>
-                      <DistMini dist={stressDist} color={C.red} label="Stress regime"/>
-                    </div>
-                  </Card>
-                );
+                return(<>
+                  <DistChart dist={normalDist} col={C.green} label={`🟢 Normal regime — ${normalDays} days`} stats={normalStats}/>
+                  <DistChart dist={stressDist}  col={C.red}   label={`🔴 Stress regime — ${stressDays} days`}  stats={stressStats}/>
+                </>);
               })()}
 
-              {/* Method note + refresh */}
-              <div style={{fontSize:10,color:C.textDim,padding:"8px 0",lineHeight:1.5}}>{method}</div>
-              <button onClick={loadRegime} style={{width:"100%",marginTop:4,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:11,color:C.textMuted,fontSize:13,cursor:"pointer"}}>↻ Refresh regime model</button>
+              {/* Feature means + transition matrix */}
+              {stateMeans&&(
+                <Card style={{padding:"12px 14px 10px"}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.textMuted,marginBottom:8}}>Feature means by regime</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    {["VIX","OVX","HYG_stress","TNX_vol"].map(f=>(
+                      <div key={f} style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px"}}>
+                        <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>{f}</div>
+                        <div style={{display:"flex",gap:10}}>
+                          <Mono style={{fontSize:12,color:C.green}}>{stateMeans[0]?.[f]??'—'}</Mono>
+                          <span style={{fontSize:10,color:C.textDim}}>vs</span>
+                          <Mono style={{fontSize:12,color:C.red}}>{stateMeans[1]?.[f]??'—'}</Mono>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              <div style={{fontSize:10,color:C.textDim,padding:"6px 0",lineHeight:1.5}}>{method}</div>
+              <button onClick={loadRegime} style={{width:"100%",marginTop:4,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:11,color:C.textMuted,fontSize:13,cursor:"pointer"}}>↻ Re-run model</button>
             </>);
           })()}
         </div>
