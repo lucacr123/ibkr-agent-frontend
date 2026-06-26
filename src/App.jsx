@@ -192,6 +192,7 @@ function InlineQuant({symbol,metric,range="1y",label}){
     if(symbol==="PORTFOLIO"||symbol==="portfolio")return null;
     return<div style={{color:C.red,fontSize:12}}>No quant data for {symbol}</div>;
   }
+  if(metric==="rollingSharpe"||metric==="rollingSharpe30")return null;
   if(metric==="distribution")return<DistributionPanel label={label||"Return Distribution"} distribution={data.distribution} id={`iq_${symbol}_${metric}`}/>;
   const series=data[metric];
   const showZero=!["rollingVol","rollingVaR95","rollingVaR99"].includes(metric);
