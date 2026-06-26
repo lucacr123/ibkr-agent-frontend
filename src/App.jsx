@@ -189,7 +189,7 @@ function InlineQuant({symbol,metric,range="1y",label}){
   },[symbol,metric,range]);
   if(loading)return<div style={{padding:"12px 0",color:C.textMuted,fontSize:12}}>Loading {label||metric}…</div>;
   if(!data||data.error){
-    if(symbol==="PORTFOLIO")return null; // Portfolio chart handled separately
+    if(symbol==="PORTFOLIO"||symbol==="portfolio")return null;
     return<div style={{color:C.red,fontSize:12}}>No quant data for {symbol}</div>;
   }
   if(metric==="distribution")return<DistributionPanel label={label||"Return Distribution"} distribution={data.distribution} id={`iq_${symbol}_${metric}`}/>;
@@ -676,22 +676,25 @@ export default function App(){
             </Card>
           )}
 
-          {/* Symbol news headlines */}
-          {(newsLoading||(symbolNews.length>0))&&(
+          {/* Symbol headlines */}
+          {(newsLoading||symbolNews.length>0)&&(
             <div style={{marginTop:12,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px"}}>
-              <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>📰 Latest Headlines</div>
-              {newsLoading&&<div style={{fontSize:12,color:C.textMuted}}>Loading news…</div>}
+              <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>📰 Latest Headlines</div>
+              {newsLoading&&<div style={{fontSize:12,color:C.textMuted}}>Loading…</div>}
               {symbolNews.map((n,i)=>(
                 <div key={i} style={{marginBottom:i<symbolNews.length-1?10:0,paddingBottom:i<symbolNews.length-1?10:0,borderBottom:i<symbolNews.length-1?`1px solid ${C.border}`:"none"}}>
-                  <a href={n.link} target="_blank" rel="noopener noreferrer" style={{fontSize:13,color:C.textPrimary,textDecoration:"none",lineHeight:1.4,display:"block"}}>{n.title}</a>
-                  <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>{n.publisher} {n.published?`· ${new Date(n.published).toLocaleDateString()}`:""}}</div>
+                  <a href={n.link||"#"} target="_blank" rel="noopener noreferrer"
+                    style={{fontSize:13,color:C.textPrimary,textDecoration:"none",lineHeight:1.45,display:"block"}}>{n.title}</a>
+                  <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>
+                    {n.publisher}{n.published?` · ${new Date(n.published).toLocaleDateString()}`:""}
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
           {/* Quant panels */}
-          {quantLoading&&<div style={{color:C.textMuted,fontSize:12,textAlign:"center",padding:"16px 0"}}>⏳ Computing Z-score, volatility, drawdown…</div>}
+          {quantLoading&&<div style={{color:C.textMuted,fontSize:12,textAlign:"center",padding:"16px 0"}}>⏳ Computing Z-score, volatility, Sharpe, drawdown…</div>}
           {quantData&&!quantLoading&&(()=>{
             const s=quantData.summary||{};
             const dates=quantData.dates;
@@ -721,7 +724,7 @@ export default function App(){
                 <QuantPanel label="Rolling Volatility % ann. (30d)" series={quantData.rollingVol} dates={dates} color={C.blue} showZero={false} id="q_vol"/>
                 <QuantPanel label="Rolling VaR 95% (30d)" series={quantData.rollingVaR95} dates={dates} color={C.red} showZero={false} id="q_var95"/>
                 <QuantPanel label="Rolling VaR 99% (30d)" series={quantData.rollingVaR99} dates={dates} color={C.red} showZero={false} id="q_var99"/>
-                {/* Rolling Sharpe removed — use Z-score for momentum signal */}
+                {/* Rolling Sharpe removed */}
                 <QuantPanel label="Drawdown % from peak" series={quantData.drawdownSeries} dates={dates} color={C.red} showZero={false} id="q_dd"/>
                 
               </>
@@ -797,6 +800,13 @@ export default function App(){
             </>
           )}
           <button onClick={()=>{loadTasks();loadLog();}} style={{width:"100%",marginTop:8,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:11,color:C.textMuted,fontSize:14,cursor:"pointer"}}>↻ Refresh</button>
+          <button onClick={async()=>{
+            const r=await fetch(`${BACKEND}/api/email/report`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+            const d=await r.json();
+            alert(d.ok?"✅ Email sent!":"❌ Failed: "+(d.error||d.reason||JSON.stringify(d)));
+          }} style={{width:"100%",marginTop:8,background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:10,padding:11,color:C.goldText,fontSize:14,cursor:"pointer",fontWeight:600}}>
+            📧 Send Portfolio Report Email Now
+          </button>
         </div>
       )}
 
