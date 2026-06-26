@@ -480,7 +480,8 @@ export default function App(){
                       <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 0 8px"}}>1Y portfolio risk metrics</div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:14}}>
                         {[
-                          {label:"Sharpe",val:combined.metrics1Y.sharpe?.toFixed(2),color:combined.metrics1Y.sharpe>1?C.green:combined.metrics1Y.sharpe<0?C.red:C.amber},
+                          {label:"Sharpe",val:combined.metrics1Y.sharpe!==null&&combined.metrics1Y.sharpe!==undefined?combined.metrics1Y.sharpe.toFixed(2):"—",color:combined.metrics1Y.sharpe>1?C.green:combined.metrics1Y.sharpe<0?C.red:C.amber},
+                          {label:"1Y return",val:combined.metrics1Y.annualizedReturnPct!==null&&combined.metrics1Y.annualizedReturnPct!==undefined?combined.metrics1Y.annualizedReturnPct.toFixed(1)+"%":"—",color:combined.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
                           {label:"Max DD",val:combined.metrics1Y.maxDrawdownPct!==null&&combined.metrics1Y.maxDrawdownPct!==undefined?combined.metrics1Y.maxDrawdownPct.toFixed(1)+"%":"—",color:C.red},
                           {label:"VaR 95",val:combined.metrics1Y.var95Pct!==null&&combined.metrics1Y.var95Pct!==undefined?combined.metrics1Y.var95Pct.toFixed(2)+"%":"—",color:C.red},
                           {label:"Info Ratio",val:combined.metrics1Y.informationRatioVsSPX!==null?combined.metrics1Y.informationRatioVsSPX?.toFixed(2):"—",color:C.blue},
@@ -496,7 +497,7 @@ export default function App(){
                           </Card>
                         ))}
                       </div>
-                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current holding weights × 1Y daily Yahoo returns, compared with SPX.</div>
+                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe = annualized return / covariance-based annualized vol; benchmark = SPX.</div>
                     </>
                   )}
                   <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Positions — combined allocation</div>
