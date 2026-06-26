@@ -818,11 +818,19 @@ export default function App(){
                       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
                       <polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill="url(#rgGrad)" clipPath="url(#rgClip)"/>
                       <polyline points={pts} fill="none" stroke={C.gold} strokeWidth="1.8" clipPath="url(#rgClip)"/>
+                      {/* X-axis: quarterly labels */}
+                      {portfolioIndex.filter((_,i)=>{
+                        if(i===0||i===portfolioIndex.length-1)return true;
+                        const d=new Date(portfolioIndex[i].date);
+                        const prev=new Date(portfolioIndex[i-1].date);
+                        return d.getMonth()!==prev.getMonth()&&d.getMonth()%3===0;
+                      }).map((p,_,arr)=>{
+                        const i=portfolioIndex.indexOf(p);
+                        const x=toX(i);
+                        return(<g key={p.date}><line x1={x} y1={H-2} x2={x} y2={H+2} stroke={C.border} strokeWidth="1"/><text x={x} y={H+10} textAnchor="middle" style={{fontSize:7,fill:C.textMuted,fontFamily:C.mono}}>{p.date.slice(0,7)}</text></g>);
+                      })}
                     </svg>
-                    <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-                      <span style={{fontSize:9,color:C.textDim}}>{portfolioIndex[0]?.date}</span>
-                      <span style={{fontSize:9,color:C.textDim}}>{portfolioIndex[portfolioIndex.length-1]?.date}</span>
-                    </div>
+                    <div style={{height:14}}/>
                   </Card>
                 );
               })()}
@@ -839,18 +847,26 @@ export default function App(){
                 if(as_!==null)aboveSegs.push([as_,stressProbFull.length-1]);
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
-                    <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(stress) — 5Y</div>
+                    <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(stress) — Last 1Y</div>
                     <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
                       <defs><clipPath id="spClip"><rect x={Y} y={0} width={W} height={H}/></clipPath></defs>
                       {[0,0.25,0.5,0.75,1.0].map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={t===0.5?C.textMuted:C.border} strokeWidth={t===0.5?"1.5":"1"} strokeDasharray={t===0.5?"5,3":"3,4"} opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{t.toFixed(2)}</text></g>);})}
                       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
                       {aboveSegs.map(([s,e],i)=>{const segPts=stressProbFull.slice(s,e+1).map((sp,j)=>`${toX(s+j).toFixed(1)},${toY(sp.prob).toFixed(1)}`).join(" ");return<polygon key={i} points={`${toX(s)},${zeroY} ${segPts} ${toX(e)},${zeroY}`} fill={C.red} opacity="0.3" clipPath="url(#spClip)"/>;})}
                       <polyline points={pts} fill="none" stroke={C.red} strokeWidth="1.5" clipPath="url(#spClip)"/>
+                      {/* X-axis: quarterly labels */}
+                      {stressProbFull.filter((_,i)=>{
+                        if(i===0||i===stressProbFull.length-1)return true;
+                        const d=new Date(stressProbFull[i].date);
+                        const prev=new Date(stressProbFull[i-1].date);
+                        return d.getMonth()!==prev.getMonth()&&d.getMonth()%3===0;
+                      }).map((p,_)=>{
+                        const i=stressProbFull.indexOf(p);
+                        const x=toX(i);
+                        return(<g key={p.date}><line x1={x} y1={H-2} x2={x} y2={H+2} stroke={C.border} strokeWidth="1"/><text x={x} y={H+10} textAnchor="middle" style={{fontSize:7,fill:C.textMuted,fontFamily:C.mono}}>{p.date.slice(0,7)}</text></g>);
+                      })}
                     </svg>
-                    <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-                      <span style={{fontSize:9,color:C.textDim}}>{stressProbFull[0]?.date}</span>
-                      <span style={{fontSize:9,color:C.textDim}}>{stressProbFull[stressProbFull.length-1]?.date}</span>
-                    </div>
+                    <div style={{height:14}}/>
                   </Card>
                 );
               })()}
