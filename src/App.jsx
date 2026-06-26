@@ -838,7 +838,7 @@ export default function App(){
                 });
                 if(ss!==null)segs.push([ss,portfolioIndex.length-1]);
                 const pts=portfolioIndex.map((p,i)=>`${toX(i).toFixed(1)},${toY(p.value).toFixed(1)}`).join(" ");
-                const chg=((portfolioIndex[portfolioIndex.length-1].value-portfolioIndex[0].value)/portfolioIndex[0].value*100).toFixed(1);
+
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
@@ -846,8 +846,6 @@ export default function App(){
                         <div style={{fontSize:13,fontWeight:700}}>Portfolio Value</div>
                         <div style={{fontSize:10,color:C.textMuted,marginTop:2}}><span style={{color:C.green}}>▬</span> Normal &nbsp;<span style={{color:C.red}}>▬</span> Stress regime</div>
                       </div>
-                      <Mono style={{fontSize:13,fontWeight:700,color:parseFloat(chg)>=0?C.green:C.red}}>{chg>=0?"+":""}{chg}%</Mono>
-                    </div>
                     <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
                       <defs>
                         <linearGradient id="rgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.gold} stopOpacity="0.2"/><stop offset="100%" stopColor={C.gold} stopOpacity="0"/></linearGradient>
@@ -917,7 +915,7 @@ export default function App(){
                     {label:"Avg Drawdown",   n:`${normalStats.avgDrawdownPct}%`,                                            s:`${stressStats.avgDrawdownPct}%`},
                     {label:"Max Drawdown",   n:`${normalStats.maxDrawdownPct}%`,                                            s:`${stressStats.maxDrawdownPct}%`},
                     {label:"Sharpe",         n:normalStats.sharpe??'—',                                                     s:stressStats.sharpe??'—'},
-                    {label:"Days",           n:normalDays,                                                                  s:stressDays},
+                    {label:"Days (1Y)",      n:normalDays,                                                                  s:stressDays},
                   ].map(row=>(
                     <div key={row.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:`1px solid ${C.border}`}}>
                       <span style={{fontSize:11,color:C.textMuted,width:90}}>{row.label}</span>
@@ -971,8 +969,8 @@ export default function App(){
                   );
                 };
                 return(<>
-                  <DistChart dist={normalDist} col={C.green} label={`🟢 Normal regime — ${normalDays} days`} stats={normalStats}/>
-                  <DistChart dist={stressDist}  col={C.red}   label={`🔴 Stress regime — ${stressDays} days`}  stats={stressStats}/>
+                  <DistChart dist={normalDist} col={C.green} label={`🟢 Normal regime — ${normalDays}d (last 1Y)`} stats={normalStats}/>
+                  <DistChart dist={stressDist}  col={C.red}   label={`🔴 Stress regime — ${stressDays}d (last 1Y)`}  stats={stressStats}/>
                 </>);
               })()}
 
