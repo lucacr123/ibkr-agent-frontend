@@ -771,7 +771,7 @@ export default function App(){
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
           <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>
-            Market Regime Detection · Full-sample Gaussian HMM · VIX + OVX + HYG + TNX vol
+            Market Regime Detection · 2-state Gaussian HMM · VIX + OVX + HYG (5Y)
           </div>
 
           {!regimeData&&!regimeLoading&&!regimeError&&(
@@ -784,7 +784,7 @@ export default function App(){
             <div style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:28,marginBottom:12}}>⏳</div>
               <div style={{color:C.textMuted,fontSize:14,fontWeight:600}}>Fitting HMM model…</div>
-              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX · OVX · HYG<br/>Running walk-forward HMM (252d windows)<br/>Takes ~30 seconds</div>
+              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX · OVX · HYG<br/>Running Baum-Welch EM (100 iterations)<br/>Takes ~20 seconds</div>
             </div>
           )}
 
@@ -866,37 +866,35 @@ export default function App(){
               })()}
 
               {/* ── Panel 2: Stress probability series ────────────── */}
-              {stressProbs?.length>0&&(()=>{
-                const ticks=[0,0.25,0.5,0.75,1.0];
+              {regimeData.stressProbFull?.length>0&&(()=>{
+                const spFull=regimeData.stressProbFull;
                 const W=300,H=100,Y=38,P=6;
-                const toY=v=>H-((v-0)/1)*(H-P*2)-P;
-                const toX=i=>Y+(i/(stressProbs.length-1))*W;
-                const pts=stressProbs.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+                const toY=v=>H-v*(H-P*2)-P;
+                const toX=i=>Y+(i/Math.max(spFull.length-1,1))*W;
+                const pts=spFull.map((s,i)=>`${toX(i).toFixed(1)},${toY(s.prob).toFixed(1)}`).join(" ");
                 const zeroY=toY(0.5);
-                // Fill above 0.5 red
                 const aboveSegs=[];let as_=null;
-                stressProbs.forEach((v,i)=>{
-                  if(v>0.5&&as_===null)as_=i;
-                  if(v<=0.5&&as_!==null){aboveSegs.push([as_,i-1]);as_=null;}
+                spFull.forEach((s,i)=>{
+                  if(s.prob>0.5&&as_===null)as_=i;
+                  if(s.prob<=0.5&&as_!==null){aboveSegs.push([as_,i-1]);as_=null;}
                 });
-                if(as_!==null)aboveSegs.push([as_,stressProbs.length-1]);
+                if(as_!==null)aboveSegs.push([as_,spFull.length-1]);
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
-                    <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(regime=stress)</div>
+                    <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(regime=stress) — 5Y</div>
                     <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
                       <defs><clipPath id="spClip"><rect x={Y} y={0} width={W} height={H}/></clipPath></defs>
                       {[0,0.25,0.5,0.75,1.0].map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={t===0.5?C.textMuted:C.border} strokeWidth={t===0.5?"1.5":"1"} strokeDasharray={t===0.5?"5,3":"3,4"} opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{t.toFixed(2)}</text></g>);})}
                       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-                      {/* Red fill above 0.5 */}
                       {aboveSegs.map(([s,e],i)=>{
-                        const segPts=stressProbs.slice(s,e+1).map((v,j)=>`${toX(s+j).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+                        const segPts=spFull.slice(s,e+1).map((sp,j)=>`${toX(s+j).toFixed(1)},${toY(sp.prob).toFixed(1)}`).join(" ");
                         return<polygon key={i} points={`${toX(s)},${zeroY} ${segPts} ${toX(e)},${zeroY}`} fill={C.red} opacity="0.3" clipPath="url(#spClip)"/>;
                       })}
                       <polyline points={pts} fill="none" stroke={C.red} strokeWidth="1.5" clipPath="url(#spClip)"/>
                     </svg>
                     <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-                      <span style={{fontSize:9,color:C.textDim}}>{regimeData.dates?.[0]}</span>
-                      <span style={{fontSize:9,color:C.textDim}}>{regimeData.dates?.[regimeData.dates.length-1]}</span>
+                      <span style={{fontSize:9,color:C.textDim}}>{spFull[0]?.date}</span>
+                      <span style={{fontSize:9,color:C.textDim}}>{spFull[spFull.length-1]?.date}</span>
                     </div>
                   </Card>
                 );
