@@ -751,7 +751,7 @@ export default function App(){
       {/* ══ REGIME ════════════════════════════════════════════════ */}
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
-          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · Walk-forward HMM · VIX + OVX (5Y)</div>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · Full-sample HMM · VIX + OVX (5Y)</div>
           {!regimeData&&!regimeLoading&&!regimeError&&(
             <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>🔴 Run HMM Regime Detection</button>
           )}
