@@ -536,7 +536,7 @@ export default function App(){
                     </div>}
                   </Card>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
-                    {[{label:"Cash",val:fmtEUR(combined.totalCash)},{label:"Stock Value",val:fmtEUR(combined.totalStockValue)},{label:"Unrealized P&L",val:combined.totalUnrealizedPnlEUR,isPnl:true},{label:"Dividends (1Y)",val:fmtEUR(combined.totalDividends)},{label:"Commissions",val:fmtEUR(combined.totalCommissions)},{label:"Broker Interest",val:fmtEUR(combined.totalBrokerInterest)}].map(s=>(
+                    {[{label:"Cash",val:fmtEUR(combined.totalCash)},{label:"Stock Value",val:fmtEUR(combined.totalStockValue)},{label:"Unrealized P&L",val:combined.totalUnrealizedPnlEUR,isPnl:true},{label:"Dividends (1Y)",val:fmtEUR(combined.totalDividends)},{label:"Commissions",val:fmtEUR(combined.totalCommissions)},{label:"Broker Interest",val:fmtEUR(combined.totalBrokerInterest)},{label:"Net Deposited (1Y)",val:fmtEUR(combined.totalNetDeposits)}].map(s=>(
                       <Card key={s.label} style={{padding:"12px 14px"}}>
                         <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div>
                         {s.isPnl?<PnlText value={s.val} style={{fontSize:15}}/>:<Mono style={{fontSize:15,fontWeight:700}}>{s.val}</Mono>}
@@ -567,8 +567,8 @@ export default function App(){
                         ))}
                       </div>
                       <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe = annualized return / covariance-based annualized vol; benchmark = SPX.</div>
-                      {combined.metrics1Y.portfolioIndex&&<QuantPanel label="Portfolio rolling Sharpe ratio (30d)" series={combined.metrics1Y.rollingSharpe30} dates={combined.metrics1Y.dates} showZero={true} id="pf_roll_sharpe"/>}
-                      {combined.metrics1Y.portfolioIndex&&<div style={{marginBottom:12}}><PriceChart bars={combined.metrics1Y.dates.map((date,i)=>({date,close:combined.metrics1Y.portfolioIndex[i]}))} height={170} id="pf_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>Reconstructed portfolio index from current weights. Start = 100.</div></div>}
+                      {combined.metrics1Y.drawdownSeries&&<QuantPanel label="Portfolio drawdown % from peak" series={combined.metrics1Y.drawdownSeries} dates={combined.metrics1Y.dates} color={C.red} showZero={false} id="pf_drawdown"/>}
+                      {combined.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={combined.metrics1Y.dates.map((date,i)=>({date,close:combined.metrics1Y.portfolioIndex[i]}))} height={170} id="pf_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>Reconstructed portfolio index (current weights × 1Y daily returns). Start = 100.</div></div>}
                     </>
                   )}
                   <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Positions — combined allocation</div>
@@ -751,7 +751,7 @@ export default function App(){
       {/* ══ REGIME ════════════════════════════════════════════════ */}
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
-          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · 2-state HMM · VIX + OVX + XTC5 iTraxx (5Y)</div>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · Walk-forward HMM · VIX + OVX (5Y)</div>
           {!regimeData&&!regimeLoading&&!regimeError&&(
             <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>🔴 Run HMM Regime Detection</button>
           )}
@@ -942,7 +942,7 @@ export default function App(){
                 <Card style={{padding:"12px 14px 10px"}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.textMuted,marginBottom:8}}>Feature means by regime (5Y)</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                    {["VIX","OVX","XTC5(iTraxx_short)"].map(f=>(
+                    {["VIX","OVX"].map(f=>(
                       <div key={f} style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px"}}>
                         <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>{f}</div>
                         <div style={{display:"flex",gap:8,alignItems:"center"}}>
