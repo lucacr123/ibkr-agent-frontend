@@ -751,7 +751,7 @@ export default function App(){
       {/* ══ REGIME ════════════════════════════════════════════════ */}
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
-          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · Full-sample HMM · VIX + OVX + iTraxx vol (5Y)</div>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · Full-sample HMM · VIX + MOVE + iTraxx vol (5Y)</div>
           {!regimeData&&!regimeLoading&&!regimeError&&(
             <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>🔴 Run HMM Regime Detection</button>
           )}
@@ -779,7 +779,7 @@ export default function App(){
                 <div>
                   <div style={{fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Current Regime</div>
                   <div style={{fontSize:22,fontWeight:800,color:isStress?C.red:C.green}}>{isStress?"🔴 STRESS":"🟢 NORMAL"}</div>
-                  <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)}</Mono> · iTraxx vol: <Mono style={{color:C.textPrimary}}>{regimeData.currentDxstVol?.toFixed(1)}%</Mono> · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
+                  <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)}</Mono> · MOVE: <Mono style={{color:C.textPrimary}}>{regimeData.currentMove?.toFixed(1)}</Mono> · iTraxx vol: <Mono style={{color:C.textPrimary}}>{regimeData.currentDxstVol?.toFixed(1)}%</Mono> · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
                   <div style={{fontSize:11,color:C.textDim,marginTop:3}}>Normal: {normalDays}d · Stress: {stressDays}d (last 1Y)</div>
                 </div>
                 <svg viewBox="0 0 70 70" style={{width:70,height:70,flexShrink:0}}>
@@ -942,7 +942,7 @@ export default function App(){
                 <Card style={{padding:"12px 14px 10px"}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.textMuted,marginBottom:8}}>Feature means by regime (5Y)</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                    {["VIX","OVX","DXST_ann_vol(iTraxx)"].map(f=>(
+                    {["VIX","MOVE","DXST_ann_vol(iTraxx)"].map(f=>(
                       <div key={f} style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px"}}>
                         <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>{f}</div>
                         <div style={{display:"flex",gap:8,alignItems:"center"}}>
