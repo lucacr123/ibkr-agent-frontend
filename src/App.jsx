@@ -532,7 +532,7 @@ export default function App(){
                     <Mono style={{fontSize:24,fontWeight:700,color:C.goldText}}>{fmtEUR(combined.totalNetLiquidation)}</Mono>
                     {combined.avgYtdReturnPct!==0&&<div style={{marginTop:6,display:"flex",gap:16}}>
                       <div><div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN</div><Mono style={{fontSize:14,fontWeight:700,color:combined.avgYtdReturnPct>=0?C.green:C.red}}>{combined.avgYtdReturnPct>0?"+":""}{combined.avgYtdReturnPct}%</Mono></div>
-                      <div><div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y GAIN</div><PnlText value={combined.totalYtdGainEUR} style={{fontSize:14}}/></div>
+                      <div><div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y GAIN (TWR)</div><PnlText value={combined.totalYtdGainEUR} style={{fontSize:14}}/></div>
                     </div>}
                   </Card>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
@@ -598,7 +598,7 @@ export default function App(){
               {portfolioView==="u1"&&acct1&&(
                 <>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
-                    {[{label:"Net Liquidation",val:fmtEUR(acct1.netLiquidation)},{label:"Cash",val:fmtEUR(acct1.cash)},{label:"1Y Return",val:`${acct1.ytdReturn>0?"+":""}${acct1.ytdReturn?.toFixed(2)}%`,color:acct1.ytdReturn>=0?C.green:C.red},{label:"1Y Gain",val:fmtEUR(acct1.ytdGainEUR)}].map(s=>(
+                    {[{label:"Net Liquidation",val:fmtEUR(acct1.netLiquidation)},{label:"Cash",val:fmtEUR(acct1.cash)},{label:"1Y Return",val:`${acct1.ytdReturn>0?"+":""}${acct1.ytdReturn?.toFixed(2)}%`,color:acct1.ytdReturn>=0?C.green:C.red},{label:"1Y Gain (TWR)",val:fmtEUR(acct1.ytdGainEUR)}].map(s=>(
                       <Card key={s.label} style={{padding:"12px 14px"}}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div><Mono style={{fontSize:15,fontWeight:700,color:s.color||C.textPrimary}}>{s.val}</Mono></Card>
                     ))}
                   </div>
@@ -751,7 +751,7 @@ export default function App(){
       {/* ══ REGIME ════════════════════════════════════════════════ */}
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
-          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · Full-sample HMM · VIX + OVX (5Y)</div>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · Full-sample HMM · VIX + OVX + iTraxx vol (5Y)</div>
           {!regimeData&&!regimeLoading&&!regimeError&&(
             <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>🔴 Run HMM Regime Detection</button>
           )}
@@ -779,7 +779,7 @@ export default function App(){
                 <div>
                   <div style={{fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Current Regime</div>
                   <div style={{fontSize:22,fontWeight:800,color:isStress?C.red:C.green}}>{isStress?"🔴 STRESS":"🟢 NORMAL"}</div>
-                  <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)}</Mono> · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
+                  <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)}</Mono> · iTraxx vol: <Mono style={{color:C.textPrimary}}>{regimeData.currentDxstVol?.toFixed(1)}%</Mono> · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
                   <div style={{fontSize:11,color:C.textDim,marginTop:3}}>Normal: {normalDays}d · Stress: {stressDays}d (last 1Y)</div>
                 </div>
                 <svg viewBox="0 0 70 70" style={{width:70,height:70,flexShrink:0}}>
@@ -942,7 +942,7 @@ export default function App(){
                 <Card style={{padding:"12px 14px 10px"}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.textMuted,marginBottom:8}}>Feature means by regime (5Y)</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                    {["VIX","OVX"].map(f=>(
+                    {["VIX","OVX","DXST_ann_vol(iTraxx)"].map(f=>(
                       <div key={f} style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px"}}>
                         <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>{f}</div>
                         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -975,7 +975,10 @@ export default function App(){
               </div>
             </div>
           ):<PushBanner/>}
-          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Automated tasks (London time)</div>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Automated tasks (London time)</div>
+          <div style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:C.textMuted,lineHeight:1.5}}>
+            ⚠️ Tasks run automatically on Railway. If Railway sleeps between requests, tasks may not fire. Check Railway logs if tasks are missing. You can always run manually below.
+          </div>
           {tasks.map(task=>(
             <Card key={task.id}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
