@@ -565,7 +565,7 @@ export default function App(){
                           </Card>
                         ))}
                       </div>
-                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe = annualized return / covariance-based annualized vol; benchmark = SPX.</div>
+                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe/Sortino = (return − risk-free rate) / vol, risk-free = {combined.metrics1Y.riskFreeRatePct??"3.64"}% (SOFR); benchmark = SPX.</div>
                       {combined.metrics1Y.drawdownSeries&&<QuantPanel label="Portfolio drawdown % from peak" series={combined.metrics1Y.drawdownSeries} dates={combined.metrics1Y.dates} color={C.red} showZero={false} id="pf_drawdown"/>}
                       {combined.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={combined.metrics1Y.dates.map((date,i)=>({date,close:combined.metrics1Y.portfolioIndex[i]}))} height={170} id="pf_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>Reconstructed portfolio index (current weights × 1Y daily returns). Start = 100.</div></div>}
 
