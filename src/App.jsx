@@ -629,8 +629,8 @@ export default function App(){
                         };
                         return(
                           <Card style={{padding:"14px 14px 10px",marginTop:4}}>
-                            <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>Fama-French 3-Factor Regression</div>
-                            <div style={{fontSize:11,color:C.textMuted,marginBottom:14}}>OLS on {ff.n} days · R² = {(ff.rSquared*100).toFixed(1)}% · ETF proxies: SPY, IWM, IWD/IWF, EFA</div>
+                            <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>Fama-French 5-Factor Regression</div>
+                            <div style={{fontSize:11,color:C.textMuted,marginBottom:14}}>OLS on {ff.n} days · R² = {(ff.rSquared*100).toFixed(1)}% · ETF proxies: URTH, IWM, IWD/IWF, UUP, EEM</div>
                             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
                               <div style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
                                 <div style={{fontSize:9,color:C.textMuted,marginBottom:3}}>ALPHA (ann.)</div>
@@ -641,10 +641,11 @@ export default function App(){
                                 <Mono style={{fontSize:14,fontWeight:700,color:C.blue}}>{(ff.rSquared*100).toFixed(1)}%</Mono>
                               </div>
                             </div>
-                            <FactorBar label="Market Beta (Mkt-RF)" val={ff.betaMarket} desc="Sensitivity to overall market moves. 1.0 = moves with the market." range={1.5}/>
+                            <FactorBar label="Market Beta (Mkt-RF, MSCI World)" val={ff.betaMarket} desc="Sensitivity to overall global equity market moves. 1.0 = moves with the world market." range={1.5}/>
                             <FactorBar label="Size (SMB)" val={ff.betaSize} desc="Positive = tilted small-cap, negative = tilted large-cap." range={1}/>
                             <FactorBar label="Value (HML)" val={ff.betaValue} desc="Positive = tilted value stocks, negative = tilted growth stocks." range={1}/>
-                            <FactorBar label="International (Intl)" val={ff.betaInternational} desc="Positive = tilted developed ex-US (Europe/Japan), negative = tilted US." range={1}/>
+                            <FactorBar label="USD Strength (DXY)" val={ff.betaUSDStrength} desc="Positive = portfolio benefits when the US Dollar strengthens, negative = hurt by a stronger dollar." range={1}/>
+                            <FactorBar label="Emerging Markets" val={ff.betaEmergingMkts} desc="Positive = tilted emerging markets, negative = tilted developed markets." range={1}/>
                             <div style={{fontSize:10,color:C.textDim,marginTop:4}}>{ff.method}</div>
                           </Card>
                         );
