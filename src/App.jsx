@@ -569,6 +569,85 @@ export default function App(){
                       <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe = annualized return / covariance-based annualized vol; benchmark = SPX.</div>
                       {combined.metrics1Y.drawdownSeries&&<QuantPanel label="Portfolio drawdown % from peak" series={combined.metrics1Y.drawdownSeries} dates={combined.metrics1Y.dates} color={C.red} showZero={false} id="pf_drawdown"/>}
                       {combined.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={combined.metrics1Y.dates.map((date,i)=>({date,close:combined.metrics1Y.portfolioIndex[i]}))} height={170} id="pf_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>Reconstructed portfolio index (current weights × 1Y daily returns). Start = 100.</div></div>}
+
+                      {/* ── PCA Analysis ──────────────────────────── */}
+                      {combined.metrics1Y.pca&&(()=>{
+                        const{components,nAssets,totalVarianceExplainedPct}=combined.metrics1Y.pca;
+                        return(
+                          <Card style={{padding:"14px 14px 10px",marginTop:4}}>
+                            <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>PCA — Principal Component Analysis</div>
+                            <div style={{fontSize:11,color:C.textMuted,marginBottom:12}}>{components.length} components explain {totalVarianceExplainedPct}% of variance across {nAssets} holdings (1Y daily returns, correlation-based)</div>
+                            {components.map(c=>{
+                              const maxAbs=Math.max(...c.loadings.map(l=>Math.abs(l.loading)),0.01);
+                              return(
+                                <div key={c.pc} style={{marginBottom:14,paddingBottom:12,borderBottom:c.pc<components.length?`1px solid ${C.border}`:"none"}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                                    <span style={{fontSize:12,fontWeight:700,color:C.gold}}>PC{c.pc}</span>
+                                    <span style={{fontSize:11,color:C.textMuted}}>{c.varExplainedPct}% var · cum {c.cumVarExplainedPct}%</span>
+                                  </div>
+                                  {c.loadings.sort((a,b)=>Math.abs(b.loading)-Math.abs(a.loading)).map(l=>{
+                                    const w=Math.abs(l.loading)/maxAbs*100;
+                                    const col=l.loading>=0?C.green:C.red;
+                                    return(
+                                      <div key={l.symbol} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                                        <Mono style={{fontSize:10,color:C.textMuted,width:55,flexShrink:0}}>{l.symbol}</Mono>
+                                        <div style={{flex:1,background:C.border,borderRadius:3,height:10,position:"relative",overflow:"hidden"}}>
+                                          <div style={{position:"absolute",left:l.loading>=0?"50%":`${50-w/2}%`,width:`${w/2}%`,height:"100%",background:col,opacity:0.85}}/>
+                                          <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:C.textDim}}/>
+                                        </div>
+                                        <Mono style={{fontSize:10,color:col,width:42,textAlign:"right",flexShrink:0}}>{l.loading>=0?"+":""}{l.loading.toFixed(2)}</Mono>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })}
+                            <div style={{fontSize:10,color:C.textDim,marginTop:4}}>PC1 typically captures broad market direction. Loadings show how much each holding contributes to that component — same sign = move together, opposite sign = move apart.</div>
+                          </Card>
+                        );
+                      })()}
+
+                      {/* ── Fama-French 3-Factor Regression ──────── */}
+                      {combined.metrics1Y.famaFrench&&(()=>{
+                        const ff=combined.metrics1Y.famaFrench;
+                        const FactorBar=({label,val,desc,range=2})=>{
+                          const pct=Math.max(-100,Math.min(100,(val/range)*100));
+                          const col=val>=0?C.green:C.red;
+                          return(
+                            <div style={{marginBottom:12}}>
+                              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                                <span style={{fontSize:11,fontWeight:600,color:C.textPrimary}}>{label}</span>
+                                <Mono style={{fontSize:13,fontWeight:700,color:col}}>{val>=0?"+":""}{val.toFixed(3)}</Mono>
+                              </div>
+                              <div style={{background:C.border,borderRadius:3,height:10,position:"relative",overflow:"hidden"}}>
+                                <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:C.textDim,zIndex:1}}/>
+                                <div style={{position:"absolute",left:val>=0?"50%":`${50+pct/2}%`,width:`${Math.abs(pct)/2}%`,height:"100%",background:col,opacity:0.85}}/>
+                              </div>
+                              <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>{desc}</div>
+                            </div>
+                          );
+                        };
+                        return(
+                          <Card style={{padding:"14px 14px 10px",marginTop:4}}>
+                            <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>Fama-French 3-Factor Regression</div>
+                            <div style={{fontSize:11,color:C.textMuted,marginBottom:14}}>OLS on {ff.n} days · R² = {(ff.rSquared*100).toFixed(1)}% · ETF proxies: SPY, IWM, IVE/IVW</div>
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                              <div style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                                <div style={{fontSize:9,color:C.textMuted,marginBottom:3}}>ALPHA (ann.)</div>
+                                <Mono style={{fontSize:14,fontWeight:700,color:ff.alpha>=0?C.green:C.red}}>{ff.alpha>=0?"+":""}{ff.alpha}%</Mono>
+                              </div>
+                              <div style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                                <div style={{fontSize:9,color:C.textMuted,marginBottom:3}}>R-SQUARED</div>
+                                <Mono style={{fontSize:14,fontWeight:700,color:C.blue}}>{(ff.rSquared*100).toFixed(1)}%</Mono>
+                              </div>
+                            </div>
+                            <FactorBar label="Market Beta (Mkt-RF)" val={ff.betaMarket} desc="Sensitivity to overall market moves. 1.0 = moves with the market." range={1.5}/>
+                            <FactorBar label="Size (SMB)" val={ff.betaSize} desc="Positive = tilted small-cap, negative = tilted large-cap." range={1}/>
+                            <FactorBar label="Value (HML)" val={ff.betaValue} desc="Positive = tilted value stocks, negative = tilted growth stocks." range={1}/>
+                            <div style={{fontSize:10,color:C.textDim,marginTop:4}}>{ff.method}</div>
+                          </Card>
+                        );
+                      })()}
                     </>
                   )}
                   <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Positions — combined allocation</div>
