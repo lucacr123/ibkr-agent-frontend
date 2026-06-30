@@ -530,9 +530,8 @@ export default function App(){
                   <Card style={{padding:"16px"}}>
                     <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Combined Net Liquidation</div>
                     <Mono style={{fontSize:24,fontWeight:700,color:C.goldText}}>{fmtEUR(combined.totalNetLiquidation)}</Mono>
-                    {combined.avgYtdReturnPct!==0&&<div style={{marginTop:6,display:"flex",gap:16}}>
-                      <div><div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN</div><Mono style={{fontSize:14,fontWeight:700,color:combined.avgYtdReturnPct>=0?C.green:C.red}}>{combined.avgYtdReturnPct>0?"+":""}{combined.avgYtdReturnPct}%</Mono></div>
-                      <div><div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y GAIN (TWR)</div><PnlText value={combined.totalYtdGainEUR} style={{fontSize:14}}/></div>
+                    {combined.avgYtdReturnPct!==0&&<div style={{marginTop:6}}>
+                      <div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN</div><Mono style={{fontSize:14,fontWeight:700,color:combined.avgYtdReturnPct>=0?C.green:C.red}}>{combined.avgYtdReturnPct>0?"+":""}{combined.avgYtdReturnPct}%</Mono>
                     </div>}
                   </Card>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
@@ -551,7 +550,8 @@ export default function App(){
                         {[
                           {label:"Sharpe",val:combined.metrics1Y.sharpe!==null&&combined.metrics1Y.sharpe!==undefined?combined.metrics1Y.sharpe.toFixed(2):"—",color:combined.metrics1Y.sharpe>1?C.green:combined.metrics1Y.sharpe<0?C.red:C.amber},
                           {label:"1Y return",val:combined.metrics1Y.annualizedReturnPct!==null&&combined.metrics1Y.annualizedReturnPct!==undefined?combined.metrics1Y.annualizedReturnPct.toFixed(1)+"%":"—",color:combined.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
-                          {label:"Max DD",val:combined.metrics1Y.maxDrawdownPct!==null&&combined.metrics1Y.maxDrawdownPct!==undefined?combined.metrics1Y.maxDrawdownPct.toFixed(1)+"%":"—",color:C.red},
+                          {label:"Max DD (real)",val:combined.realDrawdown?combined.realDrawdown.maxDrawdownPct.toFixed(1)+"%":(combined.metrics1Y.maxDrawdownPct!==null&&combined.metrics1Y.maxDrawdownPct!==undefined?combined.metrics1Y.maxDrawdownPct.toFixed(1)+"%":"—"),color:C.red},
+                          {label:"Current DD",val:combined.realDrawdown?combined.realDrawdown.currentDrawdownPct.toFixed(1)+"%":"—",color:combined.realDrawdown&&combined.realDrawdown.currentDrawdownPct<-5?C.red:combined.realDrawdown&&combined.realDrawdown.currentDrawdownPct<-2?C.amber:C.green},
                           {label:"VaR 95",val:combined.metrics1Y.var95Pct!==null&&combined.metrics1Y.var95Pct!==undefined?combined.metrics1Y.var95Pct.toFixed(2)+"%":"—",color:C.red},
                           {label:"Info Ratio",val:combined.metrics1Y.informationRatioVsSPX!==null?combined.metrics1Y.informationRatioVsSPX?.toFixed(2):"—",color:C.blue},
                           {label:"Avg daily",val:combined.metrics1Y.averageDailyReturnPct!==null&&combined.metrics1Y.averageDailyReturnPct!==undefined?combined.metrics1Y.averageDailyReturnPct.toFixed(3)+"%":"—",color:combined.metrics1Y.averageDailyReturnPct>=0?C.green:C.red},
@@ -566,8 +566,9 @@ export default function App(){
                           </Card>
                         ))}
                       </div>
-                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe = annualized return / covariance-based annualized vol; benchmark = SPX.</div>
-                      {combined.metrics1Y.drawdownSeries&&<QuantPanel label="Portfolio drawdown % from peak" series={combined.metrics1Y.drawdownSeries} dates={combined.metrics1Y.dates} color={C.red} showZero={false} id="pf_drawdown"/>}
+                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe = annualized return / covariance-based annualized vol; benchmark = SPX. Max DD/Current DD use real broker-reported NLV history when available.</div>
+                      {combined.realDrawdown&&<QuantPanel label="Portfolio drawdown % from peak (REAL broker NLV)" series={combined.realDrawdown.series.map(s=>s.drawdownPct)} dates={combined.realDrawdown.series.map(s=>s.date)} color={C.red} showZero={false} id="pf_drawdown_real"/>}
+                      {!combined.realDrawdown&&combined.metrics1Y.drawdownSeries&&<QuantPanel label="Portfolio drawdown % from peak (Yahoo proxy)" series={combined.metrics1Y.drawdownSeries} dates={combined.metrics1Y.dates} color={C.red} showZero={false} id="pf_drawdown"/>}
                       {combined.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={combined.metrics1Y.dates.map((date,i)=>({date,close:combined.metrics1Y.portfolioIndex[i]}))} height={170} id="pf_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>Reconstructed portfolio index (current weights × 1Y daily returns). Start = 100.</div></div>}
 
                       {/* ── PCA Analysis ──────────────────────────── */}
@@ -679,7 +680,7 @@ export default function App(){
               {portfolioView==="u1"&&acct1&&(
                 <>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
-                    {[{label:"Net Liquidation",val:fmtEUR(acct1.netLiquidation)},{label:"Cash",val:fmtEUR(acct1.cash)},{label:"1Y Return",val:`${acct1.ytdReturn>0?"+":""}${acct1.ytdReturn?.toFixed(2)}%`,color:acct1.ytdReturn>=0?C.green:C.red},{label:"1Y Gain (TWR)",val:fmtEUR(acct1.ytdGainEUR)}].map(s=>(
+                    {[{label:"Net Liquidation",val:fmtEUR(acct1.netLiquidation)},{label:"Cash",val:fmtEUR(acct1.cash)},{label:"1Y Return",val:`${acct1.ytdReturn>0?"+":""}${acct1.ytdReturn?.toFixed(2)}%`,color:acct1.ytdReturn>=0?C.green:C.red},{label:"Stock Value",val:fmtEUR(acct1.stockValue)}].map(s=>(
                       <Card key={s.label} style={{padding:"12px 14px"}}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div><Mono style={{fontSize:15,fontWeight:700,color:s.color||C.textPrimary}}>{s.val}</Mono></Card>
                     ))}
                   </div>
