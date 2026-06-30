@@ -630,7 +630,7 @@ export default function App(){
                         return(
                           <Card style={{padding:"14px 14px 10px",marginTop:4}}>
                             <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>Fama-French 3-Factor Regression</div>
-                            <div style={{fontSize:11,color:C.textMuted,marginBottom:14}}>OLS on {ff.n} days · R² = {(ff.rSquared*100).toFixed(1)}% · ETF proxies: SPY, IWM, IVE/IVW, EFA</div>
+                            <div style={{fontSize:11,color:C.textMuted,marginBottom:14}}>OLS on {ff.n} days · R² = {(ff.rSquared*100).toFixed(1)}% · ETF proxies: SPY, IWM, IWD/IWF, EFA</div>
                             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
                               <div style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
                                 <div style={{fontSize:9,color:C.textMuted,marginBottom:3}}>ALPHA (ann.)</div>
