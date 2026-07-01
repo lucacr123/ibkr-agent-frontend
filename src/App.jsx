@@ -395,17 +395,31 @@ export default function App(){
 
   useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
 
-  // ── Pyodide Web Worker ─────────────────────────────────────────────
-  useEffect(()=>{
-    const worker = new Worker("/pyodide-worker.js");
-    pyWorkerRef.current = worker;
-    worker.postMessage({ type: "init", backend: BACKEND });
-    worker.onmessage = (e) => {
-      const { type, text } = e.data;
-      if (type === "status") setPyStatus(text === "Python ready" ? "ready" : "loading");
-    };
-    return () => worker.terminate();
-  }, []);
+  // ── Pyodide Web Worker — lazy load on first Python execution ─────
+  function getPyWorker() {
+    if (pyWorkerRef.current) return pyWorkerRef.current;
+    try {
+      const worker = new Worker("/pyodide-worker.js");
+      worker.postMessage({ type: "init", backend: BACKEND });
+      worker.onmessage = (e) => {
+        const { type, text } = e.data;
+        if (type === "status") {
+          setPyStatus(text === "Python ready" ? "ready" : "loading");
+        }
+      };
+      worker.onerror = (e) => {
+        console.error("Pyodide worker error:", e);
+        setPyStatus("idle");
+        pyWorkerRef.current = null;
+      };
+      pyWorkerRef.current = worker;
+      setPyStatus("loading");
+      return worker;
+    } catch(e) {
+      console.error("Failed to create Pyodide worker:", e);
+      return null;
+    }
+  }
   useEffect(()=>{loadPortfolio();loadTasks();loadLog();checkStatus();checkPush();},[]);
 
   async function checkStatus(){try{const r=await fetch(`${BACKEND}/api/ibkr/status`);const d=await r.json();setIbkrOk(d.authenticated);}catch{setIbkrOk(false);}}
@@ -466,8 +480,8 @@ export default function App(){
   // ── Run Python in Pyodide worker ──────────────────────────────────
   function executePython(code, description, messageId) {
     return new Promise((resolve, reject) => {
-      const worker = pyWorkerRef.current;
-      if (!worker) return reject(new Error("Python worker not initialized"));
+      const worker = getPyWorker();
+      if (!worker) return reject(new Error("Failed to initialize Python worker"));
       setPyStatus("running");
       const handler = (e) => {
         if (e.data.id !== messageId) return;
