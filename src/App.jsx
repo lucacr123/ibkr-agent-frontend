@@ -597,13 +597,7 @@ export default function App(){
       {/* ══ CHAT ══════════════════════════════════════════════════ */}
       {tab==="chat"&&(
         <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-          {/* Python status pill */}
-          {pyStatus!=="idle"&&<div style={{padding:"4px 14px",background:C.surface,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:6,fontSize:11}}>
-            <div style={{width:6,height:6,borderRadius:"50%",background:pyStatus==="ready"?C.green:pyStatus==="running"?C.amber:"#555"}}/>
-            <span style={{color:pyStatus==="ready"?C.green:pyStatus==="running"?C.amber:C.textDim}}>
-              {pyStatus==="ready"?"Python ready":pyStatus==="running"?"Running Python…":"Loading Python…"}
-            </span>
-          </div>}
+          {/* Python status — subtle inline only, no layout-breaking bar */}
           <div style={{flex:1,overflowY:"auto",padding:16}}>
             <PushBanner/>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
