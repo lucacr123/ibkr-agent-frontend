@@ -18,7 +18,7 @@ function AllocationBar({pct}){return<div style={{height:4,background:C.border,bo
 function ExpandableChart({title="Chart",children}){
   const [open,setOpen]=useState(false);
   return <>
-    <div onClick={()=>setOpen(true)} title="Click to expand" style={{cursor:"zoom-in"}}>{children}</div>
+    <div onClick={()=>setOpen(true)} title="Click to expand" style={{cursor:"zoom-in",overflow:"hidden",width:"100%",minWidth:0}}>{children}</div>
     {open&&<div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.82)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
       <div onClick={e=>e.stopPropagation()} style={{width:"min(980px,96vw)",maxHeight:"90vh",background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:16,boxShadow:"0 24px 80px rgba(0,0,0,0.45)",cursor:"default"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={{fontWeight:700,color:C.goldText}}>{title}</div><button onClick={()=>setOpen(false)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,color:C.textMuted,borderRadius:8,padding:"6px 10px",cursor:"pointer"}}>Close</button></div>
@@ -54,7 +54,7 @@ function BacktestResult({ data }) {
 
   const eqVals = equityCurve.map(p => p.value);
   const eqMin  = Math.min(...eqVals), eqMax = Math.max(...eqVals), eqR = eqMax-eqMin||1;
-  const W=400, H=90;
+  const W=380, H=90;
   const eqPts = equityCurve.map((p,i)=>`${(i/(equityCurve.length-1))*W},${H-((p.value-eqMin)/eqR)*(H-4)-2}`).join(" ");
   const eqCol = eqVals[eqVals.length-1] >= 100 ? C.green : C.red;
 
@@ -567,7 +567,7 @@ export default function App(){
             {messages.map((m,i)=>(
               <div key={i} style={{marginBottom:14,display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8,alignItems:"flex-end"}}>
                 {m.role==="assistant"&&<div style={{width:26,height:26,borderRadius:"50%",background:C.goldDim,border:`1px solid ${C.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>🤖</div>}
-                <div style={{maxWidth:"82%",padding:"10px 14px",borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",background:m.role==="user"?"#1E3A5F":C.surfaceHigh,border:m.role==="user"?"none":`1px solid ${C.border}`,color:C.textPrimary,fontSize:14,lineHeight:1.6}}>
+                <div style={{maxWidth:"82%",padding:"10px 14px",borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",background:m.role==="user"?"#1E3A5F":C.surfaceHigh,border:m.role==="user"?"none":`1px solid ${C.border}`,color:C.textPrimary,fontSize:14,lineHeight:1.6,overflow:"hidden",minWidth:0}}>
                   {m.loading?<span style={{opacity:0.4}}>Thinking…</span>:<><MessageContent content={m.content}/>{m.backtestData&&<BacktestResult data={m.backtestData}/>}</>}
                 </div>
               </div>
