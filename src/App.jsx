@@ -35,44 +35,67 @@ function yTicks(min,max){const step=niceStep(max-min||1,4);const start=Math.floo
 function fmtTick(v){const a=Math.abs(v);if(a>=1000)return(v/1000).toFixed(1)+"k";if(a>=1)return v%1===0?v.toFixed(0):v.toFixed(2);return v.toFixed(3);}
 
 // ── Core chart (price line) ───────────────────────────────────────
-// ── Python Execution Result Renderer ──────────────────────────────
-function PyResult({ result }) {
+// ── Backtest Result Renderer ──────────────────────────────────────
+function BacktestResult({ data }) {
   const C = useColors();
-  if (!result) return null;
-  const { stdout, charts = [], csvs = [], error } = result;
+  if (!data || !data.equityCurve || !data.equityCurve.length) return null;
+  const { label, metrics: m, equityCurve, drawdownCurve } = data;
+
+  const metricCards = [
+    { l:"Total Return",  v:`${m.totalReturnPct?.toFixed(1)}%`,  c:m.totalReturnPct>=0?C.green:C.red },
+    { l:"Ann. Return",   v:`${m.annualizedRetPct?.toFixed(1)}%`, c:m.annualizedRetPct>=0?C.green:C.red },
+    { l:"Ann. Vol",      v:`${m.annualizedVolPct?.toFixed(1)}%`, c:C.textPrimary },
+    { l:"Max Drawdown",  v:`${m.maxDrawdownPct?.toFixed(1)}%`,   c:C.red },
+    { l:"Sharpe",        v:m.sharpe?.toFixed(2),                 c:m.sharpe>=1?C.green:m.sharpe>=0.5?C.amber:C.red },
+    { l:"Sortino",       v:m.sortino?.toFixed(2),                c:m.sortino>=1?C.green:C.amber },
+    { l:"Calmar",        v:m.calmar?.toFixed(2),                 c:C.gold },
+    { l:"VaR 95%/day",  v:`${m.var95DailyPct?.toFixed(2)}%`,   c:C.red },
+  ];
+
+  const eqVals = equityCurve.map(p => p.value);
+  const eqMin  = Math.min(...eqVals), eqMax = Math.max(...eqVals), eqR = eqMax-eqMin||1;
+  const W=400, H=90;
+  const eqPts = equityCurve.map((p,i)=>`${(i/(equityCurve.length-1))*W},${H-((p.value-eqMin)/eqR)*(H-4)-2}`).join(" ");
+  const eqCol = eqVals[eqVals.length-1] >= 100 ? C.green : C.red;
+
+  const ddVals = (drawdownCurve||[]).map(p=>p.value);
+  const ddMin  = Math.min(...ddVals, 0);
+  const ddR    = Math.abs(ddMin)||1;
+  const DH=40;
+  const ddPts  = (drawdownCurve||[]).map((p,i)=>`${(i/(drawdownCurve.length-1))*W},${DH-((p.value-ddMin)/ddR)*(DH-4)-2}`).join(" ");
+
   return (
-    <div style={{marginTop:10}}>
-      {error && (
-        <div style={{background:"#2A1A1A",border:`1px solid ${C.red}`,borderRadius:8,padding:"10px 12px",marginBottom:8}}>
-          <div style={{fontSize:11,color:C.red,fontWeight:700,marginBottom:4}}>⚠️ Python Error</div>
-          <pre style={{margin:0,fontSize:11,color:"#FF9999",whiteSpace:"pre-wrap",fontFamily:"monospace"}}>{error}</pre>
-        </div>
-      )}
-      {stdout && (
-        <div style={{background:"#0A0C12",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:8}}>
-          <div style={{fontSize:10,color:C.textDim,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Output</div>
-          <pre style={{margin:0,fontSize:12,color:C.textPrimary,whiteSpace:"pre-wrap",fontFamily:"monospace",maxHeight:300,overflowY:"auto"}}>{stdout}</pre>
-        </div>
-      )}
-      {(charts||[]).map((b64, i) => (
-        <div key={i} style={{marginBottom:8,borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`}}>
-          <img src={`data:image/png;base64,${b64}`} alt={`Chart ${i+1}`} style={{width:"100%",display:"block"}}/>
-        </div>
-      ))}
-      {(csvs||[]).length > 0 && (
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
-          {(csvs||[]).map((csv, i) => {
-            const fn = (csv&&csv.filename) || `data_${i}.csv`;
-            const href = `data:text/csv;base64,${csv&&csv.data}`;
-            return (
-              <a key={i} href={href} download={fn}
-                style={{display:"inline-flex",alignItems:"center",gap:6,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",fontSize:12,color:C.gold,textDecoration:"none",cursor:"pointer"}}>
-                ⬇ {fn}
-              </a>
-            );
-          })}
-        </div>
-      )}
+    <div style={{marginTop:10,background:C.surfaceHigh,borderRadius:12,padding:12,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:12,fontWeight:700,color:C.gold,marginBottom:8}}>{label||"Backtest"} · {m.nYears}Y · {m.nDays} days</div>
+      <div style={{marginBottom:6}}>
+        <div style={{fontSize:9,color:C.textDim,marginBottom:2}}>EQUITY CURVE (base 100)</div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:70}} preserveAspectRatio="none">
+          <defs><linearGradient id="bteq" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={eqCol} stopOpacity="0.25"/>
+            <stop offset="100%" stopColor={eqCol} stopOpacity="0"/>
+          </linearGradient></defs>
+          <polygon points={`0,${H} ${eqPts} ${W},${H}`} fill="url(#bteq)"/>
+          <polyline points={eqPts} fill="none" stroke={eqCol} strokeWidth="1.5"/>
+          <text x="2" y="10" fontSize="9" fill={C.textDim}>100</text>
+          <text x={W-36} y="12" fontSize="9" fill={eqCol}>{eqVals[eqVals.length-1].toFixed(1)}</text>
+        </svg>
+      </div>
+      {ddVals.length>0&&<div style={{marginBottom:8}}>
+        <div style={{fontSize:9,color:C.textDim,marginBottom:2}}>DRAWDOWN</div>
+        <svg viewBox={`0 0 ${W} ${DH}`} style={{width:"100%",height:32}} preserveAspectRatio="none">
+          <polygon points={`0,0 ${ddPts} ${W},0`} fill={C.red} opacity="0.25"/>
+          <polyline points={ddPts} fill="none" stroke={C.red} strokeWidth="1"/>
+          <text x="2" y="12" fontSize="9" fill={C.red}>{ddMin.toFixed(1)}%</text>
+        </svg>
+      </div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+        {metricCards.map(mc=>(
+          <div key={mc.l} style={{background:C.surface,borderRadius:7,padding:"5px 6px",textAlign:"center"}}>
+            <div style={{fontSize:8,color:C.textDim,textTransform:"uppercase",marginBottom:2}}>{mc.l}</div>
+            <div style={{fontSize:12,fontWeight:700,color:mc.c,fontFamily:C.mono}}>{mc.v??"-"}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -390,36 +413,7 @@ export default function App(){
   const [regimeLoading,setRegimeLoading]=useState(false);
   const [regimeError,setRegimeError]=useState(null);
   const chatEndRef=useRef(null);
-  const pyWorkerRef=useRef(null);
-  const [pyStatus,setPyStatus]=useState("idle"); // idle | loading | ready | running
-
   useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
-
-  // ── Pyodide Web Worker — lazy load on first Python execution ─────
-  function getPyWorker() {
-    if (pyWorkerRef.current) return pyWorkerRef.current;
-    try {
-      const worker = new Worker("/pyodide-worker.js");
-      worker.postMessage({ type: "init", backend: BACKEND });
-      worker.onmessage = (e) => {
-        const { type, text } = e.data;
-        if (type === "status") {
-          setPyStatus(text === "Python ready" ? "ready" : "loading");
-        }
-      };
-      worker.onerror = (e) => {
-        console.error("Pyodide worker error:", e);
-        setPyStatus("idle");
-        pyWorkerRef.current = null;
-      };
-      pyWorkerRef.current = worker;
-      setPyStatus("loading");
-      return worker;
-    } catch(e) {
-      console.error("Failed to create Pyodide worker:", e);
-      return null;
-    }
-  }
   useEffect(()=>{loadPortfolio();loadTasks();loadLog();checkStatus();checkPush();},[]);
 
   async function checkStatus(){try{const r=await fetch(`${BACKEND}/api/ibkr/status`);const d=await r.json();setIbkrOk(d.authenticated);}catch{setIbkrOk(false);}}
@@ -477,71 +471,6 @@ export default function App(){
     try{const r=await fetch(`${BACKEND}/api/regime`);const d=await r.json();if(d.error)setRegimeError(d.error);else setRegimeData(d);}catch(e){setRegimeError(e.message);}
     setRegimeLoading(false);
   }
-  // ── Run Python in Pyodide worker ──────────────────────────────────
-  function executePython(code, description, messageId) {
-    return new Promise((resolve, reject) => {
-      const worker = getPyWorker();
-      if (!worker) return reject(new Error("Failed to initialize Python worker"));
-      setPyStatus("running");
-      const handler = (e) => {
-        if (e.data.id !== messageId) return;
-        worker.removeEventListener("message", handler);
-        setPyStatus("ready");
-        if (e.data.type === "error") reject(new Error(e.data.text));
-        else resolve(e.data);
-      };
-      worker.addEventListener("message", handler);
-      worker.postMessage({ type: "run", code, id: messageId });
-    });
-  }
-
-  async function runPyTest() {
-    setMessages(prev => [...prev,
-      {role:"user", content:"🐍 Test Python"},
-      {role:"assistant", content:"🐍 Loading Python runtime (first run takes ~15s)…", loading:true, pyRunning:true}
-    ]);
-    const msgId = "pytest_" + Date.now();
-    const code = `
-import numpy as np
-import pandas as pd
-import matplotlib
-import matplotlib.pyplot as plt
-
-print("numpy:", np.__version__)
-print("pandas:", pd.__version__)
-print("matplotlib:", matplotlib.__version__)
-
-df = fetch_data("CSPX.L", "1mo")
-print("CSPX.L rows:", len(df))
-print("Last close:", round(float(df["Close"].iloc[-1]), 2))
-
-fig, ax = plt.subplots(figsize=(8, 3))
-ax.plot(df.index, df["Close"], color="#E8C87A", linewidth=1.5)
-ax.set_title("CSPX.L 1M — Python OK")
-ax.set_facecolor("#13161E")
-fig.patch.set_facecolor("#13161E")
-ax.tick_params(colors="#888")
-for s in ax.spines.values():
-    s.set_edgecolor("#333")
-plt.tight_layout()
-print("Done!")
-`;
-    try {
-      const result = await executePython(code, "Python test", msgId);
-      setMessages(prev => [...prev.slice(0,-1), {
-        role:"assistant",
-        content:"🐍 Python test complete",
-        pyResult:{stdout:result.stdout||"", charts:result.charts||[], csvs:[], error:null}
-      }]);
-    } catch(e) {
-      setMessages(prev => [...prev.slice(0,-1), {
-        role:"assistant",
-        content:"🐍 Python test failed",
-        pyResult:{stdout:"", charts:[], csvs:[], error:String(e.message||e)}
-      }]);
-    }
-  }
-
   async function sendMessage(){
     if(!input.trim()||loading)return;
     const text=input.trim();
@@ -551,32 +480,12 @@ print("Done!")
     try{
       const r=await fetch(`${BACKEND}/api/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text,history})});
       const d=await r.json();
-
-      // Handle execute_python tool calls embedded in reply
-      try {
-        if (d && d.pyodide && d.pyodide.code) {
-          const { code, description, reply } = d.pyodide;
-          const msgId = Date.now().toString();
-          setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:reply||`🐍 Running: ${description||"Python code"}`,loading:true,pyRunning:true}]);
-          try {
-            const result = await executePython(code, description, msgId);
-            setMessages(prev=>[...prev.slice(0,-1),{
-              role:"assistant",
-              content: reply || description || "Python executed",
-              pyResult: { stdout: result.stdout||"", charts: result.charts||[], csvs: result.csvs||[], error: null },
-            }]);
-          } catch(pyErr) {
-            setMessages(prev=>[...prev.slice(0,-1),{
-              role:"assistant",
-              content: reply || description || "Python error",
-              pyResult: { stdout: "", charts: [], csvs: [], error: String(pyErr.message||pyErr) },
-            }]);
-          }
-        } else {
-          setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:(d&&(d.reply||d.error))||"No response"}]);
-        }
-      } catch(outerErr) {
-        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:`Error: ${outerErr.message}`}]);
+      // Handle backtest results embedded in reply
+      const btMatch = (d.reply||"").match(/@@BACKTEST:(\d+)@@/);
+      if (btMatch && d.backtestData) {
+        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:(d.reply||"").replace(/@@BACKTEST:\d+@@/,""),backtestData:d.backtestData}]);
+      } else {
+        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:d.reply||d.error||"No response"}]);
       }
     }catch(e){setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:`Error: ${e.message}`}]);}
     setLoading(false);
@@ -648,26 +557,18 @@ print("Done!")
       {/* ══ CHAT ══════════════════════════════════════════════════ */}
       {tab==="chat"&&(
         <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-          {/* Python status — subtle inline only, no layout-breaking bar */}
           <div style={{flex:1,overflowY:"auto",padding:16}}>
             <PushBanner/>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
-              {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report"].map(q=>(
+              {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report","Backtest my portfolio 5Y"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
               ))}
-              <button onClick={()=>runPyTest()} style={{background:"#1A2A1A",border:`1px solid #2ECC71`,borderRadius:20,padding:"5px 11px",color:"#2ECC71",fontSize:12,cursor:"pointer"}}>🐍 Test Python</button>
             </div>
             {messages.map((m,i)=>(
               <div key={i} style={{marginBottom:14,display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8,alignItems:"flex-end"}}>
                 {m.role==="assistant"&&<div style={{width:26,height:26,borderRadius:"50%",background:C.goldDim,border:`1px solid ${C.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>🤖</div>}
                 <div style={{maxWidth:"82%",padding:"10px 14px",borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",background:m.role==="user"?"#1E3A5F":C.surfaceHigh,border:m.role==="user"?"none":`1px solid ${C.border}`,color:C.textPrimary,fontSize:14,lineHeight:1.6}}>
-                  {m.loading
-                    ? <span style={{opacity:0.4}}>{m.pyRunning?"🐍 Running Python…":"Thinking…"}</span>
-                    : <>
-                        <MessageContent content={m.content}/>
-                        {m.pyResult && <PyResult result={m.pyResult}/>}
-                      </>
-                  }
+                  {m.loading?<span style={{opacity:0.4}}>Thinking…</span>:<><MessageContent content={m.content}/>{m.backtestData&&<BacktestResult data={m.backtestData}/>}</>}
                 </div>
               </div>
             ))}
