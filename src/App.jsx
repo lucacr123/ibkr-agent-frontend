@@ -495,6 +495,53 @@ export default function App(){
     });
   }
 
+  async function runPyTest() {
+    setMessages(prev => [...prev,
+      {role:"user", content:"🐍 Test Python"},
+      {role:"assistant", content:"🐍 Loading Python runtime (first run takes ~15s)…", loading:true, pyRunning:true}
+    ]);
+    const msgId = "pytest_" + Date.now();
+    const code = `
+import numpy as np
+import pandas as pd
+import matplotlib
+import matplotlib.pyplot as plt
+
+print("numpy:", np.__version__)
+print("pandas:", pd.__version__)
+print("matplotlib:", matplotlib.__version__)
+
+df = fetch_data("CSPX.L", "1mo")
+print("CSPX.L rows:", len(df))
+print("Last close:", round(float(df["Close"].iloc[-1]), 2))
+
+fig, ax = plt.subplots(figsize=(8, 3))
+ax.plot(df.index, df["Close"], color="#E8C87A", linewidth=1.5)
+ax.set_title("CSPX.L 1M — Python OK")
+ax.set_facecolor("#13161E")
+fig.patch.set_facecolor("#13161E")
+ax.tick_params(colors="#888")
+for s in ax.spines.values():
+    s.set_edgecolor("#333")
+plt.tight_layout()
+print("Done!")
+`;
+    try {
+      const result = await executePython(code, "Python test", msgId);
+      setMessages(prev => [...prev.slice(0,-1), {
+        role:"assistant",
+        content:"🐍 Python test complete",
+        pyResult:{stdout:result.stdout||"", charts:result.charts||[], csvs:[], error:null}
+      }]);
+    } catch(e) {
+      setMessages(prev => [...prev.slice(0,-1), {
+        role:"assistant",
+        content:"🐍 Python test failed",
+        pyResult:{stdout:"", charts:[], csvs:[], error:String(e.message||e)}
+      }]);
+    }
+  }
+
   async function sendMessage(){
     if(!input.trim()||loading)return;
     const text=input.trim();
@@ -608,39 +655,7 @@ export default function App(){
               {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
               ))}
-              <button onClick={async()=>{
-                const msgId = Date.now().toString();
-                setMessages(prev=>[...prev,{role:"user",content:"🐍 Python test"},{role:"assistant",content:"🐍 Running Python test…",loading:true,pyRunning:true}]);
-                try {
-                  const result = await executePython(`
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Basic test
-print("✅ Python is working!")
-print(f"numpy: {np.__version__}")
-print(f"pandas: {pd.__version__}")
-
-# Fetch real data test
-df = fetch_data("CSPX.L", "1mo")
-print(f"CSPX.L: {len(df)} days, last close: {df['Close'].iloc[-1]:.2f}")
-
-# Chart test
-fig, ax = plt.subplots(figsize=(8,3))
-ax.plot(df.index, df['Close'], color='#E8C87A', linewidth=1.5)
-ax.set_title("CSPX.L — 1 Month (Python test)")
-ax.set_facecolor('#13161E')
-fig.patch.set_facecolor('#13161E')
-ax.tick_params(colors='#888')
-for spine in ax.spines.values(): spine.set_edgecolor('#333')
-plt.tight_layout()
-`, "Python environment test", msgId);
-                  setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:"🐍 Python test complete",pyResult:{stdout:result.stdout||"",charts:result.charts||[],csvs:[],error:null}}]);
-                } catch(e) {
-                  setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:"🐍 Python test failed",pyResult:{stdout:"",charts:[],csvs:[],error:String(e.message||e)}}]);
-                }
-              }} style={{background:"#1A2A1A",border:`1px solid #2ECC71`,borderRadius:20,padding:"5px 11px",color:"#2ECC71",fontSize:12,cursor:"pointer"}}>🐍 Test Python</button>
+              <button onClick={()=>runPyTest()} style={{background:"#1A2A1A",border:`1px solid #2ECC71`,borderRadius:20,padding:"5px 11px",color:"#2ECC71",fontSize:12,cursor:"pointer"}}>🐍 Test Python</button>
             </div>
             {messages.map((m,i)=>(
               <div key={i} style={{marginBottom:14,display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8,alignItems:"flex-end"}}>
