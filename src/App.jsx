@@ -54,16 +54,16 @@ function PyResult({ result }) {
           <pre style={{margin:0,fontSize:12,color:C.textPrimary,whiteSpace:"pre-wrap",fontFamily:"monospace",maxHeight:300,overflowY:"auto"}}>{stdout}</pre>
         </div>
       )}
-      {charts.map((b64, i) => (
+      {(charts||[]).map((b64, i) => (
         <div key={i} style={{marginBottom:8,borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`}}>
           <img src={`data:image/png;base64,${b64}`} alt={`Chart ${i+1}`} style={{width:"100%",display:"block"}}/>
         </div>
       ))}
-      {csvs.length > 0 && (
+      {(csvs||[]).length > 0 && (
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
-          {csvs.map((csv, i) => {
-            const fn = csv.filename || `data_${i}.csv`;
-            const href = `data:text/csv;base64,${csv.data}`;
+          {(csvs||[]).map((csv, i) => {
+            const fn = (csv&&csv.filename) || `data_${i}.csv`;
+            const href = `data:text/csv;base64,${csv&&csv.data}`;
             return (
               <a key={i} href={href} download={fn}
                 style={{display:"inline-flex",alignItems:"center",gap:6,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",fontSize:12,color:C.gold,textDecoration:"none",cursor:"pointer"}}>
@@ -506,26 +506,30 @@ export default function App(){
       const d=await r.json();
 
       // Handle execute_python tool calls embedded in reply
-      if (d.pyodide) {
-        const { code, description, reply } = d.pyodide;
-        const msgId = Date.now().toString();
-        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:reply||`Running Python: ${description}`,loading:true,pyRunning:true}]);
-        try {
-          const result = await executePython(code, description, msgId);
-          setMessages(prev=>[...prev.slice(0,-1),{
-            role:"assistant",
-            content: reply || description,
-            pyResult: result,
-          }]);
-        } catch(pyErr) {
-          setMessages(prev=>[...prev.slice(0,-1),{
-            role:"assistant",
-            content: reply || description,
-            pyResult: { stdout: "", charts: [], csvs: [], error: pyErr.message },
-          }]);
+      try {
+        if (d && d.pyodide && d.pyodide.code) {
+          const { code, description, reply } = d.pyodide;
+          const msgId = Date.now().toString();
+          setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:reply||`🐍 Running: ${description||"Python code"}`,loading:true,pyRunning:true}]);
+          try {
+            const result = await executePython(code, description, msgId);
+            setMessages(prev=>[...prev.slice(0,-1),{
+              role:"assistant",
+              content: reply || description || "Python executed",
+              pyResult: { stdout: result.stdout||"", charts: result.charts||[], csvs: result.csvs||[], error: null },
+            }]);
+          } catch(pyErr) {
+            setMessages(prev=>[...prev.slice(0,-1),{
+              role:"assistant",
+              content: reply || description || "Python error",
+              pyResult: { stdout: "", charts: [], csvs: [], error: String(pyErr.message||pyErr) },
+            }]);
+          }
+        } else {
+          setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:(d&&(d.reply||d.error))||"No response"}]);
         }
-      } else {
-        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:d.reply||d.error||"No response"}]);
+      } catch(outerErr) {
+        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:`Error: ${outerErr.message}`}]);
       }
     }catch(e){setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:`Error: ${e.message}`}]);}
     setLoading(false);
@@ -604,6 +608,39 @@ export default function App(){
               {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
               ))}
+              <button onClick={async()=>{
+                const msgId = Date.now().toString();
+                setMessages(prev=>[...prev,{role:"user",content:"🐍 Python test"},{role:"assistant",content:"🐍 Running Python test…",loading:true,pyRunning:true}]);
+                try {
+                  const result = await executePython(`
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Basic test
+print("✅ Python is working!")
+print(f"numpy: {np.__version__}")
+print(f"pandas: {pd.__version__}")
+
+# Fetch real data test
+df = fetch_data("CSPX.L", "1mo")
+print(f"CSPX.L: {len(df)} days, last close: {df['Close'].iloc[-1]:.2f}")
+
+# Chart test
+fig, ax = plt.subplots(figsize=(8,3))
+ax.plot(df.index, df['Close'], color='#E8C87A', linewidth=1.5)
+ax.set_title("CSPX.L — 1 Month (Python test)")
+ax.set_facecolor('#13161E')
+fig.patch.set_facecolor('#13161E')
+ax.tick_params(colors='#888')
+for spine in ax.spines.values(): spine.set_edgecolor('#333')
+plt.tight_layout()
+`, "Python environment test", msgId);
+                  setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:"🐍 Python test complete",pyResult:{stdout:result.stdout||"",charts:result.charts||[],csvs:[],error:null}}]);
+                } catch(e) {
+                  setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:"🐍 Python test failed",pyResult:{stdout:"",charts:[],csvs:[],error:String(e.message||e)}}]);
+                }
+              }} style={{background:"#1A2A1A",border:`1px solid #2ECC71`,borderRadius:20,padding:"5px 11px",color:"#2ECC71",fontSize:12,cursor:"pointer"}}>🐍 Test Python</button>
             </div>
             {messages.map((m,i)=>(
               <div key={i} style={{marginBottom:14,display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8,alignItems:"flex-end"}}>
