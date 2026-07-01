@@ -35,6 +35,48 @@ function yTicks(min,max){const step=niceStep(max-min||1,4);const start=Math.floo
 function fmtTick(v){const a=Math.abs(v);if(a>=1000)return(v/1000).toFixed(1)+"k";if(a>=1)return v%1===0?v.toFixed(0):v.toFixed(2);return v.toFixed(3);}
 
 // ── Core chart (price line) ───────────────────────────────────────
+// ── Python Execution Result Renderer ──────────────────────────────
+function PyResult({ result }) {
+  const C = useColors();
+  if (!result) return null;
+  const { stdout, charts = [], csvs = [], error } = result;
+  return (
+    <div style={{marginTop:10}}>
+      {error && (
+        <div style={{background:"#2A1A1A",border:`1px solid ${C.red}`,borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+          <div style={{fontSize:11,color:C.red,fontWeight:700,marginBottom:4}}>⚠️ Python Error</div>
+          <pre style={{margin:0,fontSize:11,color:"#FF9999",whiteSpace:"pre-wrap",fontFamily:"monospace"}}>{error}</pre>
+        </div>
+      )}
+      {stdout && (
+        <div style={{background:"#0A0C12",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+          <div style={{fontSize:10,color:C.textDim,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Output</div>
+          <pre style={{margin:0,fontSize:12,color:C.textPrimary,whiteSpace:"pre-wrap",fontFamily:"monospace",maxHeight:300,overflowY:"auto"}}>{stdout}</pre>
+        </div>
+      )}
+      {charts.map((b64, i) => (
+        <div key={i} style={{marginBottom:8,borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`}}>
+          <img src={`data:image/png;base64,${b64}`} alt={`Chart ${i+1}`} style={{width:"100%",display:"block"}}/>
+        </div>
+      ))}
+      {csvs.length > 0 && (
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
+          {csvs.map((csv, i) => {
+            const fn = csv.filename || `data_${i}.csv`;
+            const href = `data:text/csv;base64,${csv.data}`;
+            return (
+              <a key={i} href={href} download={fn}
+                style={{display:"inline-flex",alignItems:"center",gap:6,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",fontSize:12,color:C.gold,textDecoration:"none",cursor:"pointer"}}>
+                ⬇ {fn}
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PriceChart({bars,height=160,id="pc"}){
   if(!bars?.length)return null;
   const closes=bars.map(b=>parseFloat(b.close)).filter(v=>!isNaN(v));
@@ -348,8 +390,22 @@ export default function App(){
   const [regimeLoading,setRegimeLoading]=useState(false);
   const [regimeError,setRegimeError]=useState(null);
   const chatEndRef=useRef(null);
+  const pyWorkerRef=useRef(null);
+  const [pyStatus,setPyStatus]=useState("idle"); // idle | loading | ready | running
 
   useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
+
+  // ── Pyodide Web Worker ─────────────────────────────────────────────
+  useEffect(()=>{
+    const worker = new Worker("/pyodide-worker.js");
+    pyWorkerRef.current = worker;
+    worker.postMessage({ type: "init", backend: BACKEND });
+    worker.onmessage = (e) => {
+      const { type, text } = e.data;
+      if (type === "status") setPyStatus(text === "Python ready" ? "ready" : "loading");
+    };
+    return () => worker.terminate();
+  }, []);
   useEffect(()=>{loadPortfolio();loadTasks();loadLog();checkStatus();checkPush();},[]);
 
   async function checkStatus(){try{const r=await fetch(`${BACKEND}/api/ibkr/status`);const d=await r.json();setIbkrOk(d.authenticated);}catch{setIbkrOk(false);}}
@@ -407,6 +463,24 @@ export default function App(){
     try{const r=await fetch(`${BACKEND}/api/regime`);const d=await r.json();if(d.error)setRegimeError(d.error);else setRegimeData(d);}catch(e){setRegimeError(e.message);}
     setRegimeLoading(false);
   }
+  // ── Run Python in Pyodide worker ──────────────────────────────────
+  function executePython(code, description, messageId) {
+    return new Promise((resolve, reject) => {
+      const worker = pyWorkerRef.current;
+      if (!worker) return reject(new Error("Python worker not initialized"));
+      setPyStatus("running");
+      const handler = (e) => {
+        if (e.data.id !== messageId) return;
+        worker.removeEventListener("message", handler);
+        setPyStatus("ready");
+        if (e.data.type === "error") reject(new Error(e.data.text));
+        else resolve(e.data);
+      };
+      worker.addEventListener("message", handler);
+      worker.postMessage({ type: "run", code, id: messageId });
+    });
+  }
+
   async function sendMessage(){
     if(!input.trim()||loading)return;
     const text=input.trim();
@@ -416,7 +490,29 @@ export default function App(){
     try{
       const r=await fetch(`${BACKEND}/api/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text,history})});
       const d=await r.json();
-      setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:d.reply||d.error||"No response"}]);
+
+      // Handle execute_python tool calls embedded in reply
+      if (d.pyodide) {
+        const { code, description, reply } = d.pyodide;
+        const msgId = Date.now().toString();
+        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:reply||`Running Python: ${description}`,loading:true,pyRunning:true}]);
+        try {
+          const result = await executePython(code, description, msgId);
+          setMessages(prev=>[...prev.slice(0,-1),{
+            role:"assistant",
+            content: reply || description,
+            pyResult: result,
+          }]);
+        } catch(pyErr) {
+          setMessages(prev=>[...prev.slice(0,-1),{
+            role:"assistant",
+            content: reply || description,
+            pyResult: { stdout: "", charts: [], csvs: [], error: pyErr.message },
+          }]);
+        }
+      } else {
+        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:d.reply||d.error||"No response"}]);
+      }
     }catch(e){setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:`Error: ${e.message}`}]);}
     setLoading(false);
   }
@@ -487,6 +583,13 @@ export default function App(){
       {/* ══ CHAT ══════════════════════════════════════════════════ */}
       {tab==="chat"&&(
         <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+          {/* Python status pill */}
+          {pyStatus!=="idle"&&<div style={{padding:"4px 14px",background:C.surface,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:6,fontSize:11}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:pyStatus==="ready"?C.green:pyStatus==="running"?C.amber:"#555"}}/>
+            <span style={{color:pyStatus==="ready"?C.green:pyStatus==="running"?C.amber:C.textDim}}>
+              {pyStatus==="ready"?"Python ready":pyStatus==="running"?"Running Python…":"Loading Python…"}
+            </span>
+          </div>}
           <div style={{flex:1,overflowY:"auto",padding:16}}>
             <PushBanner/>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
@@ -498,7 +601,13 @@ export default function App(){
               <div key={i} style={{marginBottom:14,display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8,alignItems:"flex-end"}}>
                 {m.role==="assistant"&&<div style={{width:26,height:26,borderRadius:"50%",background:C.goldDim,border:`1px solid ${C.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>🤖</div>}
                 <div style={{maxWidth:"82%",padding:"10px 14px",borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",background:m.role==="user"?"#1E3A5F":C.surfaceHigh,border:m.role==="user"?"none":`1px solid ${C.border}`,color:C.textPrimary,fontSize:14,lineHeight:1.6}}>
-                  {m.loading?<span style={{opacity:0.4}}>Thinking…</span>:<MessageContent content={m.content}/>}
+                  {m.loading
+                    ? <span style={{opacity:0.4}}>{m.pyRunning?"🐍 Running Python…":"Thinking…"}</span>
+                    : <>
+                        <MessageContent content={m.content}/>
+                        {m.pyResult && <PyResult result={m.pyResult}/>}
+                      </>
+                  }
                 </div>
               </div>
             ))}
