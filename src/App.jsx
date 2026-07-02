@@ -40,8 +40,8 @@ function fmtTick(v){const a=Math.abs(v);if(a>=1000)return(v/1000).toFixed(1)+"k"
 // BACKTEST RESULT — uses same SVG canvas as existing charts
 // ═══════════════════════════════════════════════════════════════════
 function BacktestResult({ data, onEmailExport }) {
-  const [exporting, setExporting] = React.useState(false);
-  const [exported, setExported] = React.useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exported, setExported] = useState(false);
   if (!data?.equityCurve?.length) return null;
 
   const { label, metrics: m, equityCurve, drawdownCurve, signalSeries, trades = [] } = data;
