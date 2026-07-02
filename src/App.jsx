@@ -37,35 +37,150 @@ function fmtTick(v){const a=Math.abs(v);if(a>=1000)return(v/1000).toFixed(1)+"k"
 // ── Core chart (price line) ───────────────────────────────────────
 
 // ═══════════════════════════════════════════════════════════════════
-// BACKTEST RESULT — uses same SVG canvas as existing charts
+// BACKTEST CHART — proper y-axis, gridlines, date ticks
+// Scales up when inside ExpandableChart modal (uses parent height)
 // ═══════════════════════════════════════════════════════════════════
-function BacktestResult({ data, onEmailExport }) {
+function BacktestChart({ values, dates, color, title, yFormat, yLines = [], height = 100, id = "bc", isNegativeArea = false }) {
+  if (!values?.length) return null;
+  const W = 700;
+  const H = height * 3.5;
+  const PAD_L = 60, PAD_R = 14, PAD_T = 18, PAD_B = 30;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+
+  const finiteVals = values.filter(Number.isFinite);
+  let vMin = Math.min(...finiteVals), vMax = Math.max(...finiteVals);
+
+  // Include any reference lines in the visible range
+  yLines.forEach(l => {
+    if (Number.isFinite(l.value)) {
+      if (l.value < vMin) vMin = l.value;
+      if (l.value > vMax) vMax = l.value;
+    }
+  });
+
+  if (isNegativeArea) {
+    vMax = 0;
+    if (vMin >= 0) vMin = -0.01;
+    // Pad bottom by 8% for headroom
+    vMin = vMin * 1.08;
+  } else if (vMin === vMax) {
+    vMin -= 1; vMax += 1;
+  } else {
+    // Add 8% padding top and bottom so curve doesn't touch edges
+    const pad = (vMax - vMin) * 0.08;
+    vMin -= pad;
+    vMax += pad;
+  }
+
+  // Round y-axis bounds to nice numbers
+  function niceTicks(min, max, count = 5) {
+    const range = max - min;
+    const rough = range / count;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+    const normalized = rough / magnitude;
+    let step;
+    if (normalized < 1.5) step = 1 * magnitude;
+    else if (normalized < 3) step = 2 * magnitude;
+    else if (normalized < 7) step = 5 * magnitude;
+    else step = 10 * magnitude;
+    const niceMin = Math.floor(min / step) * step;
+    const niceMax = Math.ceil(max / step) * step;
+    const ticks = [];
+    for (let v = niceMin; v <= niceMax + step * 0.5; v += step) ticks.push(v);
+    return { ticks, niceMin, niceMax };
+  }
+  const { ticks: yValues, niceMin, niceMax } = niceTicks(vMin, vMax, 5);
+  vMin = niceMin; vMax = niceMax;
+  const range = vMax - vMin || 1;
+
+  const toX = i => PAD_L + (i/(values.length-1||1)) * plotW;
+  const toY = v => PAD_T + (1 - (v-vMin)/range) * plotH;
+
+  // X date ticks
+  const xTicks = [];
+  const n = values.length;
+  const nTicks = 6;
+  for (let t=0;t<=nTicks;t++) {
+    const idx = Math.floor(t/nTicks * (n-1));
+    if (dates && dates[idx]) {
+      xTicks.push({ x: toX(idx), label: dates[idx].slice(0,7) });
+    }
+  }
+
+  const pts = values.map((v,i) => `${toX(i).toFixed(1)},${toY(Math.max(vMin,Math.min(vMax,v))).toFixed(1)}`).join(" ");
+  const fmt = yFormat || (v => v.toFixed(1));
+  const clipId = `clip_${id}`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"100%",display:"block"}} preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={PAD_L} y={PAD_T} width={plotW} height={plotH}/>
+        </clipPath>
+        <linearGradient id={`grad_${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+
+      {/* Plot area background */}
+      <rect x={PAD_L} y={PAD_T} width={plotW} height={plotH} fill={C.surface} opacity="0.3"/>
+
+      {/* Y gridlines + labels */}
+      {yValues.map((v,i) => (
+        <g key={"yg"+i}>
+          <line x1={PAD_L} y1={toY(v)} x2={W-PAD_R} y2={toY(v)} stroke={C.border} strokeWidth="0.5" strokeDasharray={v===0?"":"2,3"} opacity="0.5"/>
+          <text x={PAD_L-6} y={toY(v)+4} fontSize="10" fill={C.textMuted} textAnchor="end">{fmt(v)}</text>
+        </g>
+      ))}
+
+      {/* Reference lines (entry/exit thresholds) */}
+      {yLines.map((l,i) => Number.isFinite(l.value) && l.value >= vMin && l.value <= vMax ? (
+        <g key={"yl"+i}>
+          <line x1={PAD_L} y1={toY(l.value)} x2={W-PAD_R} y2={toY(l.value)} stroke={l.color||C.amber} strokeWidth="1.2" strokeDasharray="4,3" opacity="0.85"/>
+          <text x={W-PAD_R-4} y={toY(l.value)-3} fontSize="10" fill={l.color||C.amber} textAnchor="end" fontWeight="bold">{l.label||fmt(l.value)}</text>
+        </g>
+      ) : null)}
+
+      {/* Curve + fill — clipped to plot area */}
+      <g clipPath={`url(#${clipId})`}>
+        {isNegativeArea ? (
+          <polygon points={`${toX(0)},${toY(0)} ${pts} ${toX(values.length-1)},${toY(0)}`} fill={color} opacity="0.2"/>
+        ) : (
+          <polygon points={`${toX(0)},${toY(vMin)} ${pts} ${toX(values.length-1)},${toY(vMin)}`} fill={`url(#grad_${id})`}/>
+        )}
+        <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8"/>
+      </g>
+
+      {/* Axis borders */}
+      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={PAD_T+plotH} stroke={C.border} strokeWidth="1"/>
+      <line x1={PAD_L} y1={PAD_T+plotH} x2={W-PAD_R} y2={PAD_T+plotH} stroke={C.border} strokeWidth="1"/>
+
+      {/* X date labels */}
+      {xTicks.map((t,i) => (
+        <text key={"xt"+i} x={t.x} y={H-8} fontSize="10" fill={C.textMuted} textAnchor="middle">{t.label}</text>
+      ))}
+
+      {/* Title */}
+      {title && <text x={PAD_L} y={12} fontSize="10" fill={C.textDim} textTransform="uppercase" letterSpacing="0.05em">{title}</text>}
+    </svg>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BACKTEST RESULT — orchestrates the charts + metrics + export
+// ═══════════════════════════════════════════════════════════════════
+function BacktestResult({ data }) {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
   if (!data?.equityCurve?.length) return null;
 
-  const { label, metrics: m, equityCurve, drawdownCurve, signalSeries, trades = [] } = data;
-  const W=300, EH=100, DDH=50, SH=40, Y=0;
+  const { label, metrics: m, equityCurve, drawdownCurve, signalSeries, exitSignalSeries, trades = [], dates } = data;
 
-  // Equity curve
   const eqVals = equityCurve.map(p=>p.value);
-  const eqMin = Math.min(...eqVals), eqMax = Math.max(...eqVals), eqR = eqMax-eqMin||1;
-  const eqPts = eqVals.map((v,i)=>`${(i/(eqVals.length-1))*W},${EH-((v-eqMin)/eqR)*(EH-4)-2}`).join(" ");
-  const eqCol = eqVals[eqVals.length-1]>=100 ? C.green : C.red;
-
-  // Drawdown
   const ddVals = drawdownCurve.map(p=>p.value);
-  const ddMin = Math.min(...ddVals,0);
-  const ddPts = ddVals.map((v,i)=>`${(i/(ddVals.length-1))*W},${DDH-((v-ddMin)/Math.abs(ddMin||1))*(DDH-4)-2}`).join(" ");
-
-  // Signal overlay (normalised -1 to +1)
-  const sigVals = signalSeries || [];
-  const sigMax = Math.max(...sigVals.map(Math.abs),0.01);
-  const sigPts = sigVals.map((v,i)=>`${(i/(sigVals.length-1))*W},${SH/2-((v/sigMax)*(SH/2-2))}`).join(" ");
-
-  // Trade scatter positions
-  const profTrades = trades.filter(t=>t.profitable);
-  const lossTrades = trades.filter(t=>!t.profitable);
+  const eqCol = eqVals[eqVals.length-1] >= 100 ? C.green : C.red;
 
   const metricRows = [
     ["Total Return",       `${m.totalReturnPct}%`,       m.totalReturnPct>=0?C.green:C.red],
@@ -99,11 +214,21 @@ function BacktestResult({ data, onEmailExport }) {
     setExporting(false);
   }
 
+  const entryTh = data.entry_threshold;
+  const exitTh  = data.exit_threshold;
+
+  const signalYLines = data.signal_type !== "buy_hold" ? [
+    data.signal_direction === "momentum"
+      ? { value: entryTh, color: C.green, label: `entry ${entryTh}` }
+      : { value: -entryTh, color: C.green, label: `entry ${-entryTh}` },
+    { value: exitTh, color: C.red, label: `exit ${exitTh}` },
+    { value: 0, color: C.border, label: "0" },
+  ] : [];
+
   return (
     <div style={{marginTop:12,background:C.surfaceHigh,borderRadius:14,padding:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-      {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{label} · {m.nYears}Y · {data.signal}</div>
+        <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{label} · {m.nYears}Y · {data.signal_type}</div>
         <button onClick={handleEmailExport} disabled={exporting||exported}
           style={{background:exported?"#1A2A1A":C.goldDim,border:`1px solid ${exported?C.green:C.gold}`,borderRadius:8,padding:"5px 10px",
                   color:exported?C.green:C.gold,fontSize:11,cursor:exporting?"default":"pointer",fontWeight:600}}>
@@ -112,45 +237,33 @@ function BacktestResult({ data, onEmailExport }) {
       </div>
 
       {/* Equity curve */}
-      <div style={{marginBottom:6}}>
-        <div style={{fontSize:9,color:C.textDim,marginBottom:2,textTransform:"uppercase"}}>Equity Curve (base 100)</div>
+      <div style={{marginBottom:8, height:120}}>
         <ExpandableChart title="Equity Curve">
-          <svg viewBox={`0 0 ${W} ${EH}`} style={{width:"100%",height:75}} preserveAspectRatio="none">
-            <defs><linearGradient id="bt_eq" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={eqCol} stopOpacity="0.25"/>
-              <stop offset="100%" stopColor={eqCol} stopOpacity="0"/>
-            </linearGradient></defs>
-            <polygon points={`0,${EH} ${eqPts} ${W},${EH}`} fill="url(#bt_eq)"/>
-            <polyline points={eqPts} fill="none" stroke={eqCol} strokeWidth="1.5"/>
-            <text x="2" y="10" fontSize="8" fill={C.textDim}>100</text>
-            <text x={W-36} y="12" fontSize="9" fill={eqCol} fontWeight="bold">{eqVals[eqVals.length-1].toFixed(1)}</text>
-          </svg>
+          <BacktestChart values={eqVals} dates={dates} color={eqCol} title="Equity Curve (base 100)" yFormat={v=>v.toFixed(0)} yLines={[{value:100,color:C.border,label:"100"}]} id="bt_eq"/>
         </ExpandableChart>
       </div>
 
       {/* Drawdown */}
-      <div style={{marginBottom:6}}>
-        <div style={{fontSize:9,color:C.textDim,marginBottom:2,textTransform:"uppercase"}}>Drawdown</div>
+      <div style={{marginBottom:8, height:90}}>
         <ExpandableChart title="Drawdown">
-          <svg viewBox={`0 0 ${W} ${DDH}`} style={{width:"100%",height:40}} preserveAspectRatio="none">
-            <polygon points={`0,0 ${ddPts} ${W},0`} fill={C.red} opacity="0.2"/>
-            <polyline points={ddPts} fill="none" stroke={C.red} strokeWidth="1"/>
-            <text x="2" y="10" fontSize="8" fill={C.red}>{ddMin.toFixed(1)}%</text>
-          </svg>
+          <BacktestChart values={ddVals} dates={dates} color={C.red} title="Drawdown %" yFormat={v=>v.toFixed(1)+"%"} isNegativeArea id="bt_dd"/>
         </ExpandableChart>
       </div>
 
       {/* Signal series */}
-      {sigVals.length>0 && data.signal !== "buy_hold" && (
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:9,color:C.textDim,marginBottom:2,textTransform:"uppercase"}}>Signal ({data.signal}) · entry: {data.entry_threshold}</div>
-          <ExpandableChart title="Signal">
-            <svg viewBox={`0 0 ${W} ${SH}`} style={{width:"100%",height:32}} preserveAspectRatio="none">
-              <line x1="0" y1={SH/2} x2={W} y2={SH/2} stroke={C.border} strokeWidth="0.5"/>
-              <line x1="0" y1={SH/2-(data.entry_threshold/sigMax)*(SH/2-2)} x2={W} y2={SH/2-(data.entry_threshold/sigMax)*(SH/2-2)} stroke={C.green} strokeWidth="0.5" strokeDasharray="3"/>
-              <line x1="0" y1={SH/2+(data.entry_threshold/sigMax)*(SH/2-2)} x2={W} y2={SH/2+(data.entry_threshold/sigMax)*(SH/2-2)} stroke={C.red} strokeWidth="0.5" strokeDasharray="3"/>
-              <polyline points={sigPts} fill="none" stroke={C.blue} strokeWidth="1"/>
-            </svg>
+      {signalSeries?.length > 0 && data.signal_type !== "buy_hold" && (
+        <div style={{marginBottom:8, height:100}}>
+          <ExpandableChart title={`Entry Signal (${data.signal_type})`}>
+            <BacktestChart values={signalSeries} dates={dates} color={C.blue} title={`Entry Signal (${data.signal_type})`} yFormat={v=>v.toFixed(2)} yLines={signalYLines} id="bt_sig"/>
+          </ExpandableChart>
+        </div>
+      )}
+
+      {/* Exit signal (separate) */}
+      {exitSignalSeries?.length > 0 && (
+        <div style={{marginBottom:10, height:100}}>
+          <ExpandableChart title={`Exit Signal (${data.exit_signal_type})`}>
+            <BacktestChart values={exitSignalSeries} dates={dates} color={C.amber} title={`Exit Signal (${data.exit_signal_type})`} yFormat={v=>v.toFixed(2)} yLines={[{value:exitTh,color:C.red,label:`exit ${exitTh}`},{value:0,color:C.border,label:"0"}]} id="bt_exit"/>
           </ExpandableChart>
         </div>
       )}
@@ -165,8 +278,7 @@ function BacktestResult({ data, onEmailExport }) {
         ))}
       </div>
 
-      {/* Trade distribution */}
-      {trades.length>0&&(
+      {trades.length>0 && (
         <div style={{fontSize:10,color:C.textDim,borderTop:`1px solid ${C.border}`,paddingTop:8,marginTop:4}}>
           <span style={{color:C.green,marginRight:8}}>✅ {m.nProfitable} wins</span>
           <span style={{color:C.red,marginRight:8}}>❌ {m.nLosing} losses</span>
