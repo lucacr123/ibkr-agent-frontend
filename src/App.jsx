@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, cloneElement } from "react";
 
 const C = {
   bg:"#0D0F14",surface:"#13161E",surfaceHigh:"#1A1E2A",
@@ -15,14 +15,16 @@ const Mono=({children,style={}})=><span style={{fontFamily:C.mono,...style}}>{ch
 const Card=({children,style={}})=><div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:10,...style}}>{children}</div>;
 function PnlText({value,style={}}){const v=parseFloat(value||0);if(v===0)return<Mono style={{color:C.textMuted,...style}}>—</Mono>;return<Mono style={{color:v>=0?C.green:C.red,fontWeight:600,...style}}>{v>=0?"+":""}€{Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</Mono>;}
 function AllocationBar({pct}){return<div style={{height:4,background:C.border,borderRadius:2,marginTop:6,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:C.gold,borderRadius:2}}/></div>;}
-function ExpandableChart({title="Chart",children}){
+function ExpandableChart({title="Chart",children,inlineHeight=120}){
   const [open,setOpen]=useState(false);
+  // Clone child and pass isExpanded prop so the chart can adjust its rendering
+  const expandedChild = open ? cloneElement(children, { isExpanded: true }) : null;
   return <>
-    <div onClick={()=>setOpen(true)} title="Click to expand" style={{cursor:"zoom-in",overflow:"hidden",width:"100%",minWidth:0}}>{children}</div>
+    <div onClick={()=>setOpen(true)} title="Click to expand" style={{cursor:"zoom-in",overflow:"hidden",width:"100%",minWidth:0,height:inlineHeight,display:"block"}}>{children}</div>
     {open&&<div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.82)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"min(980px,96vw)",maxHeight:"90vh",background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:16,boxShadow:"0 24px 80px rgba(0,0,0,0.45)",cursor:"default"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={{fontWeight:700,color:C.goldText}}>{title}</div><button onClick={()=>setOpen(false)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,color:C.textMuted,borderRadius:8,padding:"6px 10px",cursor:"pointer"}}>Close</button></div>
-        <div style={{height:"min(68vh,620px)",overflow:"hidden"}}>{children}</div>
+      <div onClick={e=>e.stopPropagation()} style={{width:"min(980px,96vw)",maxHeight:"90vh",background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:16,boxShadow:"0 24px 80px rgba(0,0,0,0.45)",cursor:"default",display:"flex",flexDirection:"column"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexShrink:0}}><div style={{fontWeight:700,color:C.goldText}}>{title}</div><button onClick={()=>setOpen(false)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,color:C.textMuted,borderRadius:8,padding:"6px 10px",cursor:"pointer"}}>Close</button></div>
+        <div style={{flex:1,minHeight:400,overflow:"hidden",display:"flex"}}>{expandedChild}</div>
       </div>
     </div>}
   </>;
@@ -40,11 +42,14 @@ function fmtTick(v){const a=Math.abs(v);if(a>=1000)return(v/1000).toFixed(1)+"k"
 // BACKTEST CHART — proper y-axis, gridlines, date ticks
 // Scales up when inside ExpandableChart modal (uses parent height)
 // ═══════════════════════════════════════════════════════════════════
-function BacktestChart({ values, dates, color, title, yFormat, yLines = [], height = 100, id = "bc", isNegativeArea = false }) {
+function BacktestChart({ values, dates, color, title, yFormat, yLines = [], height = 100, id = "bc", isNegativeArea = false, isExpanded = false }) {
   if (!values?.length) return null;
-  const W = 700;
-  const H = height * 3.5;
-  const PAD_L = 60, PAD_R = 14, PAD_T = 18, PAD_B = 30;
+  const W = isExpanded ? 1200 : 700;
+  const H = isExpanded ? 500 : height * 3.5;
+  const PAD_L = isExpanded ? 80 : 60;
+  const PAD_R = isExpanded ? 20 : 14;
+  const PAD_T = isExpanded ? 30 : 18;
+  const PAD_B = isExpanded ? 40 : 30;
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
 
@@ -237,23 +242,23 @@ function BacktestResult({ data }) {
       </div>
 
       {/* Equity curve */}
-      <div style={{marginBottom:8, height:120}}>
-        <ExpandableChart title="Equity Curve">
+      <div style={{marginBottom:8}}>
+        <ExpandableChart title="Equity Curve" inlineHeight={140}>
           <BacktestChart values={eqVals} dates={dates} color={eqCol} title="Equity Curve (base 100)" yFormat={v=>v.toFixed(0)} yLines={[{value:100,color:C.border,label:"100"}]} id="bt_eq"/>
         </ExpandableChart>
       </div>
 
       {/* Drawdown */}
-      <div style={{marginBottom:8, height:90}}>
-        <ExpandableChart title="Drawdown">
+      <div style={{marginBottom:8}}>
+        <ExpandableChart title="Drawdown" inlineHeight={100}>
           <BacktestChart values={ddVals} dates={dates} color={C.red} title="Drawdown %" yFormat={v=>v.toFixed(1)+"%"} isNegativeArea id="bt_dd"/>
         </ExpandableChart>
       </div>
 
       {/* Signal series */}
       {signalSeries?.length > 0 && data.signal_type !== "buy_hold" && (
-        <div style={{marginBottom:8, height:100}}>
-          <ExpandableChart title={`Entry Signal (${data.signal_type})`}>
+        <div style={{marginBottom:8}}>
+          <ExpandableChart title={`Entry Signal (${data.signal_type})`} inlineHeight={120}>
             <BacktestChart values={signalSeries} dates={dates} color={C.blue} title={`Entry Signal (${data.signal_type})`} yFormat={v=>v.toFixed(2)} yLines={signalYLines} id="bt_sig"/>
           </ExpandableChart>
         </div>
@@ -261,8 +266,8 @@ function BacktestResult({ data }) {
 
       {/* Exit signal (separate) */}
       {exitSignalSeries?.length > 0 && (
-        <div style={{marginBottom:10, height:100}}>
-          <ExpandableChart title={`Exit Signal (${data.exit_signal_type})`}>
+        <div style={{marginBottom:10}}>
+          <ExpandableChart title={`Exit Signal (${data.exit_signal_type})`} inlineHeight={120}>
             <BacktestChart values={exitSignalSeries} dates={dates} color={C.amber} title={`Exit Signal (${data.exit_signal_type})`} yFormat={v=>v.toFixed(2)} yLines={[{value:exitTh,color:C.red,label:`exit ${exitTh}`},{value:0,color:C.border,label:"0"}]} id="bt_exit"/>
           </ExpandableChart>
         </div>
