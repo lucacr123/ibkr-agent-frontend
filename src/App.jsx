@@ -35,67 +35,144 @@ function yTicks(min,max){const step=niceStep(max-min||1,4);const start=Math.floo
 function fmtTick(v){const a=Math.abs(v);if(a>=1000)return(v/1000).toFixed(1)+"k";if(a>=1)return v%1===0?v.toFixed(0):v.toFixed(2);return v.toFixed(3);}
 
 // ── Core chart (price line) ───────────────────────────────────────
-// ── Backtest Result Renderer ──────────────────────────────────────
-function BacktestResult({ data }) {
-  const C = useColors();
-  if (!data || !data.equityCurve || !data.equityCurve.length) return null;
-  const { label, metrics: m, equityCurve, drawdownCurve } = data;
 
-  const metricCards = [
-    { l:"Total Return",  v:`${m.totalReturnPct?.toFixed(1)}%`,  c:m.totalReturnPct>=0?C.green:C.red },
-    { l:"Ann. Return",   v:`${m.annualizedRetPct?.toFixed(1)}%`, c:m.annualizedRetPct>=0?C.green:C.red },
-    { l:"Ann. Vol",      v:`${m.annualizedVolPct?.toFixed(1)}%`, c:C.textPrimary },
-    { l:"Max Drawdown",  v:`${m.maxDrawdownPct?.toFixed(1)}%`,   c:C.red },
-    { l:"Sharpe",        v:m.sharpe?.toFixed(2),                 c:m.sharpe>=1?C.green:m.sharpe>=0.5?C.amber:C.red },
-    { l:"Sortino",       v:m.sortino?.toFixed(2),                c:m.sortino>=1?C.green:C.amber },
-    { l:"Calmar",        v:m.calmar?.toFixed(2),                 c:C.gold },
-    { l:"VaR 95%/day",  v:`${m.var95DailyPct?.toFixed(2)}%`,   c:C.red },
+// ═══════════════════════════════════════════════════════════════════
+// BACKTEST RESULT — uses same SVG canvas as existing charts
+// ═══════════════════════════════════════════════════════════════════
+function BacktestResult({ data, onEmailExport }) {
+  const [exporting, setExporting] = React.useState(false);
+  const [exported, setExported] = React.useState(false);
+  if (!data?.equityCurve?.length) return null;
+
+  const { label, metrics: m, equityCurve, drawdownCurve, signalSeries, trades = [] } = data;
+  const W=300, EH=100, DDH=50, SH=40, Y=0;
+
+  // Equity curve
+  const eqVals = equityCurve.map(p=>p.value);
+  const eqMin = Math.min(...eqVals), eqMax = Math.max(...eqVals), eqR = eqMax-eqMin||1;
+  const eqPts = eqVals.map((v,i)=>`${(i/(eqVals.length-1))*W},${EH-((v-eqMin)/eqR)*(EH-4)-2}`).join(" ");
+  const eqCol = eqVals[eqVals.length-1]>=100 ? C.green : C.red;
+
+  // Drawdown
+  const ddVals = drawdownCurve.map(p=>p.value);
+  const ddMin = Math.min(...ddVals,0);
+  const ddPts = ddVals.map((v,i)=>`${(i/(ddVals.length-1))*W},${DDH-((v-ddMin)/Math.abs(ddMin||1))*(DDH-4)-2}`).join(" ");
+
+  // Signal overlay (normalised -1 to +1)
+  const sigVals = signalSeries || [];
+  const sigMax = Math.max(...sigVals.map(Math.abs),0.01);
+  const sigPts = sigVals.map((v,i)=>`${(i/(sigVals.length-1))*W},${SH/2-((v/sigMax)*(SH/2-2))}`).join(" ");
+
+  // Trade scatter positions
+  const profTrades = trades.filter(t=>t.profitable);
+  const lossTrades = trades.filter(t=>!t.profitable);
+
+  const metricRows = [
+    ["Total Return",       `${m.totalReturnPct}%`,       m.totalReturnPct>=0?C.green:C.red],
+    ["Ann. Return",        `${m.annualizedRetPct}%`,      m.annualizedRetPct>=0?C.green:C.red],
+    ["Ann. Vol",           `${m.annualizedVolPct}%`,      C.textPrimary],
+    ["Max Drawdown",       `${m.maxDrawdownPct}%`,        C.red],
+    ["Sharpe",             m.sharpe,                      m.sharpe>=1?C.green:m.sharpe>=0.5?C.amber:C.red],
+    ["Sortino",            m.sortino,                     m.sortino>=1?C.green:C.amber],
+    ["Calmar",             m.calmar,                      C.gold],
+    ["VaR 95%/day",        `${m.var95DailyPct}%`,        C.red],
+    ["% in Market",        `${m.pctTimeInMarket}%`,       C.blue],
+    ["N Trades",           m.nTrades,                     C.textPrimary],
+    ["Win Rate",           `${m.winRatePct}%`,            m.winRatePct>=50?C.green:C.red],
+    ["EV / Trade",         `${m.evPerTradePct}%`,         m.evPerTradePct>=0?C.green:C.red],
+    ["Cond. EV (win)",     `${m.condEvWinPct}%`,          C.green],
+    ["Cond. EV (loss)",    `${m.condEvLossPct}%`,         C.red],
+    ["Trade σ",            `${m.tradeRetStdPct}%`,        C.textPrimary],
+    ["Avg Duration",       `${m.avgDurationDays}d`,       C.textPrimary],
+    ["Profit Factor",      m.profitFactor??"-",           (m.profitFactor||0)>=1?C.green:C.red],
   ];
 
-  const eqVals = equityCurve.map(p => p.value);
-  const eqMin  = Math.min(...eqVals), eqMax = Math.max(...eqVals), eqR = eqMax-eqMin||1;
-  const W=380, H=90;
-  const eqPts = equityCurve.map((p,i)=>`${(i/(equityCurve.length-1))*W},${H-((p.value-eqMin)/eqR)*(H-4)-2}`).join(" ");
-  const eqCol = eqVals[eqVals.length-1] >= 100 ? C.green : C.red;
-
-  const ddVals = (drawdownCurve||[]).map(p=>p.value);
-  const ddMin  = Math.min(...ddVals, 0);
-  const ddR    = Math.abs(ddMin)||1;
-  const DH=40;
-  const ddPts  = (drawdownCurve||[]).map((p,i)=>`${(i/(drawdownCurve.length-1))*W},${DH-((p.value-ddMin)/ddR)*(DH-4)-2}`).join(" ");
+  async function handleEmailExport() {
+    setExporting(true);
+    try {
+      await fetch(`${BACKEND}/api/backtest/email`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ backtestResult: data })
+      });
+      setExported(true);
+    } catch(e) { alert("Export failed: "+e.message); }
+    setExporting(false);
+  }
 
   return (
-    <div style={{marginTop:10,background:C.surfaceHigh,borderRadius:12,padding:12,border:`1px solid ${C.border}`}}>
-      <div style={{fontSize:12,fontWeight:700,color:C.gold,marginBottom:8}}>{label||"Backtest"} · {m.nYears}Y · {m.nDays} days</div>
-      <div style={{marginBottom:6}}>
-        <div style={{fontSize:9,color:C.textDim,marginBottom:2}}>EQUITY CURVE (base 100)</div>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:70}} preserveAspectRatio="none">
-          <defs><linearGradient id="bteq" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={eqCol} stopOpacity="0.25"/>
-            <stop offset="100%" stopColor={eqCol} stopOpacity="0"/>
-          </linearGradient></defs>
-          <polygon points={`0,${H} ${eqPts} ${W},${H}`} fill="url(#bteq)"/>
-          <polyline points={eqPts} fill="none" stroke={eqCol} strokeWidth="1.5"/>
-          <text x="2" y="10" fontSize="9" fill={C.textDim}>100</text>
-          <text x={W-36} y="12" fontSize="9" fill={eqCol}>{eqVals[eqVals.length-1].toFixed(1)}</text>
-        </svg>
+    <div style={{marginTop:12,background:C.surfaceHigh,borderRadius:14,padding:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{label} · {m.nYears}Y · {data.signal}</div>
+        <button onClick={handleEmailExport} disabled={exporting||exported}
+          style={{background:exported?"#1A2A1A":C.goldDim,border:`1px solid ${exported?C.green:C.gold}`,borderRadius:8,padding:"5px 10px",
+                  color:exported?C.green:C.gold,fontSize:11,cursor:exporting?"default":"pointer",fontWeight:600}}>
+          {exported?"✅ Sent!":exporting?"Sending…":"📧 Export to Email"}
+        </button>
       </div>
-      {ddVals.length>0&&<div style={{marginBottom:8}}>
-        <div style={{fontSize:9,color:C.textDim,marginBottom:2}}>DRAWDOWN</div>
-        <svg viewBox={`0 0 ${W} ${DH}`} style={{width:"100%",height:32}} preserveAspectRatio="none">
-          <polygon points={`0,0 ${ddPts} ${W},0`} fill={C.red} opacity="0.25"/>
-          <polyline points={ddPts} fill="none" stroke={C.red} strokeWidth="1"/>
-          <text x="2" y="12" fontSize="9" fill={C.red}>{ddMin.toFixed(1)}%</text>
-        </svg>
-      </div>}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
-        {metricCards.map(mc=>(
-          <div key={mc.l} style={{background:C.surface,borderRadius:7,padding:"5px 6px",textAlign:"center"}}>
-            <div style={{fontSize:8,color:C.textDim,textTransform:"uppercase",marginBottom:2}}>{mc.l}</div>
-            <div style={{fontSize:12,fontWeight:700,color:mc.c,fontFamily:C.mono}}>{mc.v??"-"}</div>
+
+      {/* Equity curve */}
+      <div style={{marginBottom:6}}>
+        <div style={{fontSize:9,color:C.textDim,marginBottom:2,textTransform:"uppercase"}}>Equity Curve (base 100)</div>
+        <ExpandableChart title="Equity Curve">
+          <svg viewBox={`0 0 ${W} ${EH}`} style={{width:"100%",height:75}} preserveAspectRatio="none">
+            <defs><linearGradient id="bt_eq" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={eqCol} stopOpacity="0.25"/>
+              <stop offset="100%" stopColor={eqCol} stopOpacity="0"/>
+            </linearGradient></defs>
+            <polygon points={`0,${EH} ${eqPts} ${W},${EH}`} fill="url(#bt_eq)"/>
+            <polyline points={eqPts} fill="none" stroke={eqCol} strokeWidth="1.5"/>
+            <text x="2" y="10" fontSize="8" fill={C.textDim}>100</text>
+            <text x={W-36} y="12" fontSize="9" fill={eqCol} fontWeight="bold">{eqVals[eqVals.length-1].toFixed(1)}</text>
+          </svg>
+        </ExpandableChart>
+      </div>
+
+      {/* Drawdown */}
+      <div style={{marginBottom:6}}>
+        <div style={{fontSize:9,color:C.textDim,marginBottom:2,textTransform:"uppercase"}}>Drawdown</div>
+        <ExpandableChart title="Drawdown">
+          <svg viewBox={`0 0 ${W} ${DDH}`} style={{width:"100%",height:40}} preserveAspectRatio="none">
+            <polygon points={`0,0 ${ddPts} ${W},0`} fill={C.red} opacity="0.2"/>
+            <polyline points={ddPts} fill="none" stroke={C.red} strokeWidth="1"/>
+            <text x="2" y="10" fontSize="8" fill={C.red}>{ddMin.toFixed(1)}%</text>
+          </svg>
+        </ExpandableChart>
+      </div>
+
+      {/* Signal series */}
+      {sigVals.length>0 && data.signal !== "buy_hold" && (
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:9,color:C.textDim,marginBottom:2,textTransform:"uppercase"}}>Signal ({data.signal}) · entry: {data.entry_threshold}</div>
+          <ExpandableChart title="Signal">
+            <svg viewBox={`0 0 ${W} ${SH}`} style={{width:"100%",height:32}} preserveAspectRatio="none">
+              <line x1="0" y1={SH/2} x2={W} y2={SH/2} stroke={C.border} strokeWidth="0.5"/>
+              <line x1="0" y1={SH/2-(data.entry_threshold/sigMax)*(SH/2-2)} x2={W} y2={SH/2-(data.entry_threshold/sigMax)*(SH/2-2)} stroke={C.green} strokeWidth="0.5" strokeDasharray="3"/>
+              <line x1="0" y1={SH/2+(data.entry_threshold/sigMax)*(SH/2-2)} x2={W} y2={SH/2+(data.entry_threshold/sigMax)*(SH/2-2)} stroke={C.red} strokeWidth="0.5" strokeDasharray="3"/>
+              <polyline points={sigPts} fill="none" stroke={C.blue} strokeWidth="1"/>
+            </svg>
+          </ExpandableChart>
+        </div>
+      )}
+
+      {/* Metrics grid */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:10}}>
+        {metricRows.map(([l,v,c])=>(
+          <div key={l} style={{background:C.surface,borderRadius:7,padding:"5px 7px"}}>
+            <div style={{fontSize:8,color:C.textDim,textTransform:"uppercase",marginBottom:1}}>{l}</div>
+            <div style={{fontSize:12,fontWeight:700,color:c,fontFamily:"monospace"}}>{v??"-"}</div>
           </div>
         ))}
       </div>
+
+      {/* Trade distribution */}
+      {trades.length>0&&(
+        <div style={{fontSize:10,color:C.textDim,borderTop:`1px solid ${C.border}`,paddingTop:8,marginTop:4}}>
+          <span style={{color:C.green,marginRight:8}}>✅ {m.nProfitable} wins</span>
+          <span style={{color:C.red,marginRight:8}}>❌ {m.nLosing} losses</span>
+          <span>avg {m.avgDurationDays}d/trade · {data.range} · {m.nDays} days total</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -480,13 +557,11 @@ export default function App(){
     try{
       const r=await fetch(`${BACKEND}/api/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text,history})});
       const d=await r.json();
-      // Handle backtest results embedded in reply
-      const btMatch = (d.reply||"").match(/@@BACKTEST:(\d+)@@/);
-      if (btMatch && d.backtestData) {
-        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:(d.reply||"").replace(/@@BACKTEST:\d+@@/,""),backtestData:d.backtestData}]);
-      } else {
-        setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:d.reply||d.error||"No response"}]);
-      }
+      setMessages(prev=>[...prev.slice(0,-1),{
+        role:"assistant",
+        content:d.reply||d.error||"No response",
+        backtestData: d.backtestData||null,
+      }]);
     }catch(e){setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:`Error: ${e.message}`}]);}
     setLoading(false);
   }
