@@ -290,6 +290,68 @@ function BacktestResult({ data }) {
           <span>avg {m.avgDurationDays}d/trade · {data.range} · {m.nDays} days total</span>
         </div>
       )}
+
+      {/* Trigger dates table — rendered from raw data, zero Claude interpretation */}
+      {data.triggerDates?.length > 0 && (
+        <div style={{marginTop:10,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.gold,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+            Signal Trigger Dates — from computed data
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"monospace"}}>
+              <thead>
+                <tr style={{borderBottom:`1px solid ${C.border}`}}>
+                  {["#","Date","Type","Signal Value"].map(h=>(
+                    <th key={h} style={{padding:"3px 8px",color:C.textMuted,fontWeight:600,textAlign:"left"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.triggerDates.map((t,i)=>(
+                  <tr key={i} style={{borderBottom:`1px solid ${C.border}22`}}>
+                    <td style={{padding:"3px 8px",color:C.textDim}}>{i+1}</td>
+                    <td style={{padding:"3px 8px",color:C.textPrimary}}>{t.date}</td>
+                    <td style={{padding:"3px 8px",color:t.type==="ENTRY"?C.green:C.red,fontWeight:700}}>{t.type}</td>
+                    <td style={{padding:"3px 8px",color:t.signal<0?C.red:C.green}}>{t.signal?.toFixed(3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Trade list — rendered from raw data */}
+      {trades.length>0 && (
+        <div style={{marginTop:10,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.gold,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+            Trade List — from computed data
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"monospace"}}>
+              <thead>
+                <tr style={{borderBottom:`1px solid ${C.border}`}}>
+                  {["#","Entry","Exit","Days","Return","W/L"].map(h=>(
+                    <th key={h} style={{padding:"3px 8px",color:C.textMuted,fontWeight:600,textAlign:"left"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {trades.map((t,i)=>(
+                  <tr key={i} style={{borderBottom:`1px solid ${C.border}22`}}>
+                    <td style={{padding:"3px 8px",color:C.textDim}}>{i+1}</td>
+                    <td style={{padding:"3px 8px",color:C.textPrimary}}>{t.entryDate}</td>
+                    <td style={{padding:"3px 8px",color:C.textPrimary}}>{t.exitDate}{t.open?" 🟡":""}</td>
+                    <td style={{padding:"3px 8px",color:C.textPrimary}}>{t.durationDays}</td>
+                    <td style={{padding:"3px 8px",color:t.returnPct>=0?C.green:C.red,fontWeight:700}}>{t.returnPct?.toFixed(2)}%</td>
+                    <td style={{padding:"3px 8px",color:t.profitable?C.green:C.red}}>{t.profitable?"✅":"❌"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
