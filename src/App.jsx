@@ -42,240 +42,167 @@ function fmtTick(v){const a=Math.abs(v);if(a>=1000)return(v/1000).toFixed(1)+"k"
 // BACKTEST CHART — proper y-axis, gridlines, date ticks
 // Scales up when inside ExpandableChart modal (uses parent height)
 // ═══════════════════════════════════════════════════════════════════
-function BacktestChart({ values, dates, color, title, yFormat, yLines = [], height = 100, id = "bc", isNegativeArea = false, isExpanded = false }) {
+// ═══════════════════════════════════════════════════════════════════
+// BACKTEST RESULT — renders ALL data directly from server JSON
+// Claude's text response never contains numbers. This does.
+// ═══════════════════════════════════════════════════════════════════
+function BacktestChart({ values, dates, color, id, yFormat, yLines=[], isNegativeArea=false, isExpanded=false }) {
   if (!values?.length) return null;
-  const W = isExpanded ? 1200 : 700;
-  const H = isExpanded ? 500 : height * 3.5;
-  const PAD_L = isExpanded ? 80 : 60;
-  const PAD_R = isExpanded ? 20 : 14;
-  const PAD_T = isExpanded ? 30 : 18;
-  const PAD_B = isExpanded ? 40 : 30;
-  const plotW = W - PAD_L - PAD_R;
-  const plotH = H - PAD_T - PAD_B;
-
-  const finiteVals = values.filter(Number.isFinite);
-  let vMin = Math.min(...finiteVals), vMax = Math.max(...finiteVals);
-
-  // Include any reference lines in the visible range
-  yLines.forEach(l => {
-    if (Number.isFinite(l.value)) {
-      if (l.value < vMin) vMin = l.value;
-      if (l.value > vMax) vMax = l.value;
-    }
-  });
-
-  if (isNegativeArea) {
-    vMax = 0;
-    if (vMin >= 0) vMin = -0.01;
-    // Pad bottom by 8% for headroom
-    vMin = vMin * 1.08;
-  } else if (vMin === vMax) {
-    vMin -= 1; vMax += 1;
-  } else {
-    // Add 8% padding top and bottom so curve doesn't touch edges
-    const pad = (vMax - vMin) * 0.08;
-    vMin -= pad;
-    vMax += pad;
-  }
-
-  // Round y-axis bounds to nice numbers
-  function niceTicks(min, max, count = 5) {
-    const range = max - min;
-    const rough = range / count;
-    const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
-    const normalized = rough / magnitude;
-    let step;
-    if (normalized < 1.5) step = 1 * magnitude;
-    else if (normalized < 3) step = 2 * magnitude;
-    else if (normalized < 7) step = 5 * magnitude;
-    else step = 10 * magnitude;
-    const niceMin = Math.floor(min / step) * step;
-    const niceMax = Math.ceil(max / step) * step;
-    const ticks = [];
-    for (let v = niceMin; v <= niceMax + step * 0.5; v += step) ticks.push(v);
-    return { ticks, niceMin, niceMax };
-  }
-  const { ticks: yValues, niceMin, niceMax } = niceTicks(vMin, vMax, 5);
-  vMin = niceMin; vMax = niceMax;
-  const range = vMax - vMin || 1;
-
-  const toX = i => PAD_L + (i/(values.length-1||1)) * plotW;
-  const toY = v => PAD_T + (1 - (v-vMin)/range) * plotH;
-
-  // X date ticks
-  const xTicks = [];
-  const n = values.length;
-  const nTicks = 6;
-  for (let t=0;t<=nTicks;t++) {
-    const idx = Math.floor(t/nTicks * (n-1));
-    if (dates && dates[idx]) {
-      xTicks.push({ x: toX(idx), label: dates[idx].slice(0,7) });
-    }
-  }
-
-  const pts = values.map((v,i) => `${toX(i).toFixed(1)},${toY(Math.max(vMin,Math.min(vMax,v))).toFixed(1)}`).join(" ");
-  const fmt = yFormat || (v => v.toFixed(1));
-  const clipId = `clip_${id}`;
-
+  const W = 700, H = isExpanded ? 480 : 280;
+  const PL=62, PR=14, PT=20, PB=32, plotW=W-PL-PR, plotH=H-PT-PB;
+  const finite = values.filter(Number.isFinite);
+  let vMin=Math.min(...finite), vMax=Math.max(...finite);
+  yLines.forEach(l=>{ if(Number.isFinite(l.value)){ if(l.value<vMin)vMin=l.value; if(l.value>vMax)vMax=l.value; }});
+  if (isNegativeArea){ vMax=0; vMin=vMin*1.1||-.01; }
+  else if(vMin===vMax){ vMin-=1; vMax+=1; }
+  else { const p=(vMax-vMin)*.08; vMin-=p; vMax+=p; }
+  function niceTicks(mn,mx,n=5){ const r=mx-mn; const mag=Math.pow(10,Math.floor(Math.log10(r/n))); const nm=r/n/mag; const st=nm<1.5?1:nm<3?2:nm<7?5:10; const s=Math.floor(mn/(st*mag))*(st*mag); const tks=[]; for(let v=s;v<=mx+st*mag*.5;v+=st*mag) tks.push(+v.toFixed(10)); return tks; }
+  const ticks=niceTicks(vMin,vMax); vMin=ticks[0]; vMax=ticks[ticks.length-1];
+  const rng=vMax-vMin||1;
+  const toX=i=>PL+(i/(values.length-1||1))*plotW;
+  const toY=v=>PT+(1-(Math.max(vMin,Math.min(vMax,v))-vMin)/rng)*plotH;
+  const pts=values.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+  const fmt=yFormat||(v=>v.toFixed(1));
+  const clip=`clip_${id}`;
+  const nXTicks=Math.min(7, Math.floor(W/100));
+  const xTicks=dates?Array.from({length:nXTicks+1},(_,i)=>{ const idx=Math.floor(i/nXTicks*(values.length-1)); return {x:toX(idx),label:dates[idx]?.slice(0,7)||""}; }):[];
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"100%",display:"block"}} preserveAspectRatio="xMidYMid meet">
       <defs>
-        <clipPath id={clipId}>
-          <rect x={PAD_L} y={PAD_T} width={plotW} height={plotH}/>
-        </clipPath>
-        <linearGradient id={`grad_${id}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28"/>
-          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        <clipPath id={clip}><rect x={PL} y={PT} width={plotW} height={plotH}/></clipPath>
+        <linearGradient id={`g_${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28"/><stop offset="100%" stopColor={color} stopOpacity="0"/>
         </linearGradient>
       </defs>
-
-      {/* Plot area background */}
-      <rect x={PAD_L} y={PAD_T} width={plotW} height={plotH} fill={C.surface} opacity="0.3"/>
-
-      {/* Y gridlines + labels */}
-      {yValues.map((v,i) => (
-        <g key={"yg"+i}>
-          <line x1={PAD_L} y1={toY(v)} x2={W-PAD_R} y2={toY(v)} stroke={C.border} strokeWidth="0.5" strokeDasharray={v===0?"":"2,3"} opacity="0.5"/>
-          <text x={PAD_L-6} y={toY(v)+4} fontSize="10" fill={C.textMuted} textAnchor="end">{fmt(v)}</text>
+      <rect x={PL} y={PT} width={plotW} height={plotH} fill={C.surface} opacity="0.3"/>
+      {ticks.map((v,i)=>(
+        <g key={i}>
+          <line x1={PL} y1={toY(v)} x2={W-PR} y2={toY(v)} stroke={C.border} strokeWidth="0.5" strokeDasharray={v===0?"":"2,4"} opacity="0.5"/>
+          <text x={PL-5} y={toY(v)+4} fontSize="10" fill={C.textMuted} textAnchor="end">{fmt(v)}</text>
         </g>
       ))}
-
-      {/* Reference lines (entry/exit thresholds) */}
-      {yLines.map((l,i) => Number.isFinite(l.value) && l.value >= vMin && l.value <= vMax ? (
-        <g key={"yl"+i}>
-          <line x1={PAD_L} y1={toY(l.value)} x2={W-PAD_R} y2={toY(l.value)} stroke={l.color||C.amber} strokeWidth="1.2" strokeDasharray="4,3" opacity="0.85"/>
-          <text x={W-PAD_R-4} y={toY(l.value)-3} fontSize="10" fill={l.color||C.amber} textAnchor="end" fontWeight="bold">{l.label||fmt(l.value)}</text>
+      {yLines.map((l,i)=>Number.isFinite(l.value)&&l.value>=vMin&&l.value<=vMax?(
+        <g key={`yl${i}`}>
+          <line x1={PL} y1={toY(l.value)} x2={W-PR} y2={toY(l.value)} stroke={l.color||C.amber} strokeWidth="1.2" strokeDasharray="5,3" opacity="0.9"/>
+          <text x={W-PR-4} y={toY(l.value)-3} fontSize="10" fill={l.color||C.amber} textAnchor="end" fontWeight="bold">{l.label||fmt(l.value)}</text>
         </g>
-      ) : null)}
-
-      {/* Curve + fill — clipped to plot area */}
-      <g clipPath={`url(#${clipId})`}>
-        {isNegativeArea ? (
-          <polygon points={`${toX(0)},${toY(0)} ${pts} ${toX(values.length-1)},${toY(0)}`} fill={color} opacity="0.2"/>
-        ) : (
-          <polygon points={`${toX(0)},${toY(vMin)} ${pts} ${toX(values.length-1)},${toY(vMin)}`} fill={`url(#grad_${id})`}/>
-        )}
+      ):null)}
+      <g clipPath={`url(#${clip})`}>
+        {isNegativeArea
+          ? <polygon points={`${toX(0)},${toY(0)} ${pts} ${toX(values.length-1)},${toY(0)}`} fill={color} opacity="0.22"/>
+          : <polygon points={`${toX(0)},${toY(vMin)} ${pts} ${toX(values.length-1)},${toY(vMin)}`} fill={`url(#g_${id})`}/>
+        }
         <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8"/>
       </g>
-
-      {/* Axis borders */}
-      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={PAD_T+plotH} stroke={C.border} strokeWidth="1"/>
-      <line x1={PAD_L} y1={PAD_T+plotH} x2={W-PAD_R} y2={PAD_T+plotH} stroke={C.border} strokeWidth="1"/>
-
-      {/* X date labels */}
-      {xTicks.map((t,i) => (
-        <text key={"xt"+i} x={t.x} y={H-8} fontSize="10" fill={C.textMuted} textAnchor="middle">{t.label}</text>
-      ))}
-
-      {/* Title */}
-      {title && <text x={PAD_L} y={12} fontSize="10" fill={C.textDim} textTransform="uppercase" letterSpacing="0.05em">{title}</text>}
+      <line x1={PL} y1={PT} x2={PL} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
+      <line x1={PL} y1={PT+plotH} x2={W-PR} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
+      {xTicks.map((t,i)=><text key={i} x={t.x} y={H-8} fontSize="10" fill={C.textMuted} textAnchor="middle">{t.label}</text>)}
     </svg>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// BACKTEST RESULT — orchestrates the charts + metrics + export
-// ═══════════════════════════════════════════════════════════════════
 function BacktestResult({ data }) {
   const [exporting, setExporting] = useState(false);
-  const [exported, setExported] = useState(false);
+  const [exported,  setExported]  = useState(false);
   if (!data?.equityCurve?.length) return null;
-
-  const { label, metrics: m, equityCurve, drawdownCurve, signalSeries, exitSignalSeries, trades = [], dates } = data;
+  const { label, metrics:m, equityCurve, drawdownCurve, signalSeries, exitSignalSeries,
+          triggerDates=[], signalBreachDates=[], trades=[], dates } = data;
 
   const eqVals = equityCurve.map(p=>p.value);
   const ddVals = drawdownCurve.map(p=>p.value);
-  const eqCol = eqVals[eqVals.length-1] >= 100 ? C.green : C.red;
+  const eqCol  = eqVals[eqVals.length-1]>=100 ? C.green : C.red;
 
-  const metricRows = [
-    ["Total Return",       `${m.totalReturnPct}%`,       m.totalReturnPct>=0?C.green:C.red],
-    ["Ann. Return",        `${m.annualizedRetPct}%`,      m.annualizedRetPct>=0?C.green:C.red],
-    ["Ann. Vol",           `${m.annualizedVolPct}%`,      C.textPrimary],
-    ["Max Drawdown",       `${m.maxDrawdownPct}%`,        C.red],
-    ["Sharpe",             m.sharpe,                      m.sharpe>=1?C.green:m.sharpe>=0.5?C.amber:C.red],
-    ["Sortino",            m.sortino,                     m.sortino>=1?C.green:C.amber],
-    ["Calmar",             m.calmar,                      C.gold],
-    ["VaR 95%/day",        `${m.var95DailyPct}%`,        C.red],
-    ["% in Market",        `${m.pctTimeInMarket}%`,       C.blue],
-    ["N Trades",           m.nTrades,                     C.textPrimary],
-    ["Win Rate",           `${m.winRatePct}%`,            m.winRatePct>=50?C.green:C.red],
-    ["EV / Trade",         `${m.evPerTradePct}%`,         m.evPerTradePct>=0?C.green:C.red],
-    ["Cond. EV (win)",     `${m.condEvWinPct}%`,          C.green],
-    ["Cond. EV (loss)",    `${m.condEvLossPct}%`,         C.red],
-    ["Trade σ",            `${m.tradeRetStdPct}%`,        C.textPrimary],
-    ["Avg Duration",       `${m.avgDurationDays}d`,       C.textPrimary],
-    ["Profit Factor",      m.profitFactor??"-",           (m.profitFactor||0)>=1?C.green:C.red],
+  const metricCards = [
+    ["Total Return",  `${m.totalReturnPct}%`,     m.totalReturnPct>=0?C.green:C.red],
+    ["Ann. Return",   `${m.annualizedRetPct}%`,    m.annualizedRetPct>=0?C.green:C.red],
+    ["Ann. Vol",      `${m.annualizedVolPct}%`,    C.textPrimary],
+    ["Max Drawdown",  `${m.maxDrawdownPct}%`,      C.red],
+    ["Sharpe",        m.sharpe,                    m.sharpe>=1?C.green:m.sharpe>=0.5?C.amber:C.red],
+    ["Sortino",       m.sortino,                   m.sortino>=1?C.green:C.amber],
+    ["Calmar",        m.calmar,                    C.gold],
+    ["VaR 95%/day",   `${m.var95DailyPct}%`,      C.red],
+    ["% in Market",   `${m.pctTimeInMarket}%`,     C.blue],
+    ["N Trades",      m.nTrades,                   C.textPrimary],
+    ["Win Rate",      `${m.winRatePct}%`,           m.winRatePct>=50?C.green:C.red],
+    ["EV/Trade",      `${m.evPerTradePct}%`,        m.evPerTradePct>=0?C.green:C.red],
+    ["Cond EV Win",   `${m.condEvWinPct}%`,         C.green],
+    ["Cond EV Loss",  `${m.condEvLossPct}%`,        C.red],
+    ["Trade σ",       `${m.tradeRetStdPct}%`,       C.textPrimary],
+    ["Avg Duration",  `${m.avgDurationDays}d`,      C.textPrimary],
+    ["Profit Factor", m.profitFactor??"-",           (m.profitFactor||0)>=1?C.green:C.red],
   ];
-
-  async function handleEmailExport() {
-    setExporting(true);
-    try {
-      await fetch(`${BACKEND}/api/backtest/email`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ backtestResult: data })
-      });
-      setExported(true);
-    } catch(e) { alert("Export failed: "+e.message); }
-    setExporting(false);
-  }
 
   const entryTh = data.entry_threshold;
   const exitTh  = data.exit_threshold;
-
-  const signalYLines = data.signal_type !== "buy_hold" ? [
-    data.signal_direction === "momentum"
-      ? { value: entryTh, color: C.green, label: `entry ${entryTh}` }
-      : { value: -entryTh, color: C.green, label: `entry ${-entryTh}` },
-    { value: exitTh, color: C.red, label: `exit ${exitTh}` },
-    { value: 0, color: C.border, label: "0" },
+  const sigDir  = data.signal_direction;
+  const sigLines = data.signal_type!=="buy_hold" ? [
+    {value: sigDir==="momentum"? entryTh:-entryTh, color:C.green, label:`entry ${sigDir==="momentum"?entryTh:-entryTh}`},
+    {value: exitTh, color:C.red, label:`exit ${exitTh}`},
+    {value:0, color:C.border, label:"0"},
   ] : [];
+
+  const thStyle = {padding:"4px 10px",color:C.textMuted,fontWeight:600,textAlign:"left",fontSize:11,borderBottom:`1px solid ${C.border}`};
+  const tdStyle = (col) => ({padding:"4px 10px",color:col||C.textPrimary,fontSize:11,fontFamily:"monospace",borderBottom:`1px solid ${C.border}22`});
+
+  async function emailExport() {
+    setExporting(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/backtest/email`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({backtestResult:data})});
+      if(r.ok) setExported(true); else alert("Email failed");
+    } catch(e){ alert("Error: "+e.message); }
+    setExporting(false);
+  }
 
   return (
     <div style={{marginTop:12,background:C.surfaceHigh,borderRadius:14,padding:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{label} · {m.nYears}Y · {data.signal_type}</div>
-        <button onClick={handleEmailExport} disabled={exporting||exported}
-          style={{background:exported?"#1A2A1A":C.goldDim,border:`1px solid ${exported?C.green:C.gold}`,borderRadius:8,padding:"5px 10px",
-                  color:exported?C.green:C.gold,fontSize:11,cursor:exporting?"default":"pointer",fontWeight:600}}>
-          {exported?"✅ Sent!":exporting?"Sending…":"📧 Export to Email"}
+        <button onClick={emailExport} disabled={exporting||exported}
+          style={{background:exported?"#1A2A1A":C.goldDim,border:`1px solid ${exported?C.green:C.gold}`,borderRadius:8,padding:"5px 10px",color:exported?C.green:C.gold,fontSize:11,cursor:"pointer",fontWeight:600}}>
+          {exported?"✅ Sent!":exporting?"Sending…":"📧 Email Report"}
         </button>
       </div>
 
       {/* Equity curve */}
-      <div style={{marginBottom:8}}>
+      <div style={{marginBottom:8,height:140}}>
         <ExpandableChart title="Equity Curve" inlineHeight={140}>
-          <BacktestChart values={eqVals} dates={dates} color={eqCol} title="Equity Curve (base 100)" yFormat={v=>v.toFixed(0)} yLines={[{value:100,color:C.border,label:"100"}]} id="bt_eq"/>
+          <BacktestChart values={eqVals} dates={dates} color={eqCol} id="bt_eq"
+            yFormat={v=>v.toFixed(0)} yLines={[{value:100,color:C.border,label:"100"}]}/>
         </ExpandableChart>
       </div>
 
       {/* Drawdown */}
-      <div style={{marginBottom:8}}>
-        <ExpandableChart title="Drawdown" inlineHeight={100}>
-          <BacktestChart values={ddVals} dates={dates} color={C.red} title="Drawdown %" yFormat={v=>v.toFixed(1)+"%"} isNegativeArea id="bt_dd"/>
+      <div style={{marginBottom:8,height:90}}>
+        <ExpandableChart title="Drawdown" inlineHeight={90}>
+          <BacktestChart values={ddVals} dates={dates} color={C.red} id="bt_dd"
+            yFormat={v=>v.toFixed(1)+"%"} isNegativeArea/>
         </ExpandableChart>
       </div>
 
-      {/* Signal series */}
-      {signalSeries?.length > 0 && data.signal_type !== "buy_hold" && (
-        <div style={{marginBottom:8}}>
-          <ExpandableChart title={`Entry Signal (${data.signal_type})`} inlineHeight={120}>
-            <BacktestChart values={signalSeries} dates={dates} color={C.blue} title={`Entry Signal (${data.signal_type})`} yFormat={v=>v.toFixed(2)} yLines={signalYLines} id="bt_sig"/>
+      {/* Entry signal */}
+      {signalSeries?.length>0 && data.signal_type!=="buy_hold" && (
+        <div style={{marginBottom:8,height:110}}>
+          <ExpandableChart title={`Signal: ${data.signal_type}`} inlineHeight={110}>
+            <BacktestChart values={signalSeries} dates={dates} color={C.blue} id="bt_sig"
+              yFormat={v=>v.toFixed(2)} yLines={sigLines}/>
           </ExpandableChart>
         </div>
       )}
 
-      {/* Exit signal (separate) */}
-      {exitSignalSeries?.length > 0 && (
-        <div style={{marginBottom:10}}>
-          <ExpandableChart title={`Exit Signal (${data.exit_signal_type})`} inlineHeight={120}>
-            <BacktestChart values={exitSignalSeries} dates={dates} color={C.amber} title={`Exit Signal (${data.exit_signal_type})`} yFormat={v=>v.toFixed(2)} yLines={[{value:exitTh,color:C.red,label:`exit ${exitTh}`},{value:0,color:C.border,label:"0"}]} id="bt_exit"/>
+      {/* Exit signal if separate */}
+      {exitSignalSeries?.length>0 && (
+        <div style={{marginBottom:8,height:110}}>
+          <ExpandableChart title={`Exit Signal: ${data.exit_signal_type}`} inlineHeight={110}>
+            <BacktestChart values={exitSignalSeries} dates={dates} color={C.amber} id="bt_exit"
+              yFormat={v=>v.toFixed(2)} yLines={[{value:exitTh,color:C.red,label:`exit ${exitTh}`},{value:0,color:C.border,label:"0"}]}/>
           </ExpandableChart>
         </div>
       )}
 
       {/* Metrics grid */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:10}}>
-        {metricRows.map(([l,v,c])=>(
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:12}}>
+        {metricCards.map(([l,v,c])=>(
           <div key={l} style={{background:C.surface,borderRadius:7,padding:"5px 7px"}}>
             <div style={{fontSize:8,color:C.textDim,textTransform:"uppercase",marginBottom:1}}>{l}</div>
             <div style={{fontSize:12,fontWeight:700,color:c,fontFamily:"monospace"}}>{v??"-"}</div>
@@ -283,36 +210,24 @@ function BacktestResult({ data }) {
         ))}
       </div>
 
-      {trades.length>0 && (
-        <div style={{fontSize:10,color:C.textDim,borderTop:`1px solid ${C.border}`,paddingTop:8,marginTop:4}}>
-          <span style={{color:C.green,marginRight:8}}>✅ {m.nProfitable} wins</span>
-          <span style={{color:C.red,marginRight:8}}>❌ {m.nLosing} losses</span>
-          <span>avg {m.avgDurationDays}d/trade · {data.range} · {m.nDays} days total</span>
-        </div>
-      )}
-
-      {/* Trigger dates table — rendered from raw data, zero Claude interpretation */}
-      {data.triggerDates?.length > 0 && (
-        <div style={{marginTop:10,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.gold,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>
-            Signal Trigger Dates — from computed data
+      {/* Trigger dates — server-computed, authoritative */}
+      {triggerDates.length>0 && (
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.gold,marginBottom:6,textTransform:"uppercase"}}>
+            Entry/Exit Dates — computed by server
           </div>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"monospace"}}>
-              <thead>
-                <tr style={{borderBottom:`1px solid ${C.border}`}}>
-                  {["#","Date","Type","Signal Value"].map(h=>(
-                    <th key={h} style={{padding:"3px 8px",color:C.textMuted,fontWeight:600,textAlign:"left"}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
+          <div style={{overflowX:"auto",maxHeight:200,overflowY:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>
+                {["#","Date","Type","Signal"].map(h=><th key={h} style={thStyle}>{h}</th>)}
+              </tr></thead>
               <tbody>
-                {data.triggerDates.map((t,i)=>(
-                  <tr key={i} style={{borderBottom:`1px solid ${C.border}22`}}>
-                    <td style={{padding:"3px 8px",color:C.textDim}}>{i+1}</td>
-                    <td style={{padding:"3px 8px",color:C.textPrimary}}>{t.date}</td>
-                    <td style={{padding:"3px 8px",color:t.type==="ENTRY"?C.green:C.red,fontWeight:700}}>{t.type}</td>
-                    <td style={{padding:"3px 8px",color:t.signal<0?C.red:C.green}}>{t.signal?.toFixed(3)}</td>
+                {triggerDates.map((t,i)=>(
+                  <tr key={i}>
+                    <td style={tdStyle(C.textDim)}>{i+1}</td>
+                    <td style={tdStyle()}>{t.date}</td>
+                    <td style={tdStyle(t.type==="ENTRY"?C.green:C.red)}>{t.type}</td>
+                    <td style={tdStyle(t.signal<0?C.red:C.green)}>{t.signal?.toFixed(4)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -321,30 +236,51 @@ function BacktestResult({ data }) {
         </div>
       )}
 
-      {/* Trade list — rendered from raw data */}
-      {trades.length>0 && (
-        <div style={{marginTop:10,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.gold,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>
-            Trade List — from computed data
+      {/* All signal breach dates */}
+      {signalBreachDates.length>0 && (
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.blue,marginBottom:6,textTransform:"uppercase"}}>
+            All Signal Breach Dates ({signalBreachDates.length} total)
           </div>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"monospace"}}>
-              <thead>
-                <tr style={{borderBottom:`1px solid ${C.border}`}}>
-                  {["#","Entry","Exit","Days","Return","W/L"].map(h=>(
-                    <th key={h} style={{padding:"3px 8px",color:C.textMuted,fontWeight:600,textAlign:"left"}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
+          <div style={{overflowX:"auto",maxHeight:200,overflowY:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>
+                {["#","Date","Signal Value"].map(h=><th key={h} style={thStyle}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {signalBreachDates.map((t,i)=>(
+                  <tr key={i}>
+                    <td style={tdStyle(C.textDim)}>{i+1}</td>
+                    <td style={tdStyle()}>{t.date}</td>
+                    <td style={tdStyle(t.signal<0?C.red:C.green)}>{t.signal?.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Trade list */}
+      {trades.length>0 && (
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:C.textMuted,marginBottom:6,textTransform:"uppercase"}}>
+            Trades ({trades.length})
+          </div>
+          <div style={{overflowX:"auto",maxHeight:220,overflowY:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>
+                {["#","Entry","Exit","Days","Return","W/L"].map(h=><th key={h} style={thStyle}>{h}</th>)}
+              </tr></thead>
               <tbody>
                 {trades.map((t,i)=>(
-                  <tr key={i} style={{borderBottom:`1px solid ${C.border}22`}}>
-                    <td style={{padding:"3px 8px",color:C.textDim}}>{i+1}</td>
-                    <td style={{padding:"3px 8px",color:C.textPrimary}}>{t.entryDate}</td>
-                    <td style={{padding:"3px 8px",color:C.textPrimary}}>{t.exitDate}{t.open?" 🟡":""}</td>
-                    <td style={{padding:"3px 8px",color:C.textPrimary}}>{t.durationDays}</td>
-                    <td style={{padding:"3px 8px",color:t.returnPct>=0?C.green:C.red,fontWeight:700}}>{t.returnPct?.toFixed(2)}%</td>
-                    <td style={{padding:"3px 8px",color:t.profitable?C.green:C.red}}>{t.profitable?"✅":"❌"}</td>
+                  <tr key={i}>
+                    <td style={tdStyle(C.textDim)}>{i+1}</td>
+                    <td style={tdStyle()}>{t.entryDate}</td>
+                    <td style={tdStyle()}>{t.exitDate}{t.open?" 🟡":""}</td>
+                    <td style={tdStyle()}>{t.durationDays}</td>
+                    <td style={tdStyle(t.returnPct>=0?C.green:C.red)}>{t.returnPct?.toFixed(2)}%</td>
+                    <td style={tdStyle(t.profitable?C.green:C.red)}>{t.profitable?"✅":"❌"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -355,6 +291,7 @@ function BacktestResult({ data }) {
     </div>
   );
 }
+
 
 function PriceChart({bars,height=160,id="pc"}){
   if(!bars?.length)return null;
@@ -743,7 +680,7 @@ export default function App(){
       setMessages(prev=>[...prev.slice(0,-1),{
         role:"assistant",
         content:d.reply||d.error||"No response",
-        backtestData: d.backtestData||null,
+        backtestData:d.backtestData||null,
       }]);
     }catch(e){setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:`Error: ${e.message}`}]);}
     setLoading(false);
@@ -818,7 +755,7 @@ export default function App(){
           <div style={{flex:1,overflowY:"auto",padding:16}}>
             <PushBanner/>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
-              {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report","Backtest my portfolio 5Y"].map(q=>(
+              {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
               ))}
             </div>
