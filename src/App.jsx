@@ -308,7 +308,7 @@ function PriceChart({bars,height=160,id="pc"}){
   const pts=closes.map((v,i)=>`${Y+(i/(closes.length-1))*W},${toY(v)}`).join(" ");
   return(
     <ExpandableChart title="Price chart">
-    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:"100%",minHeight:height}} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:"100%",minHeight:height,display:"block"}} preserveAspectRatio="xMidYMid meet">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={col} stopOpacity="0.25"/>
@@ -318,8 +318,10 @@ function PriceChart({bars,height=160,id="pc"}){
       </defs>
       {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-      <polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill={`url(#${id})`} clipPath={`url(#cp_${id})`}/>
-      <polyline points={pts} fill="none" stroke={col} strokeWidth="1.8" clipPath={`url(#cp_${id})`}/>
+      <g clipPath={`url(#cp_${id})`}>
+        <polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill={`url(#${id})`}/>
+        <polyline points={pts} fill="none" stroke={col} strokeWidth="1.8"/>
+      </g>
     </svg>
     </ExpandableChart>
   );
@@ -339,7 +341,7 @@ function CandleChart({bars,height=200,id="cc"}){
   const cw=Math.max(2,(W/recent.length)-1);
   return(
     <ExpandableChart title="Candlestick chart">
-    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:"100%",minHeight:height}} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:"100%",minHeight:height,display:"block"}} preserveAspectRatio="xMidYMid meet">
       {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
       {recent.map((b,i)=>{
@@ -378,7 +380,7 @@ function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
         <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
         <Mono style={{fontSize:13,fontWeight:700,color:col}}>{last.toFixed(3)}</Mono>
       </div>
-      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
+      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id={safeId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={col} stopOpacity="0.2"/>
@@ -389,8 +391,10 @@ function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
         {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
         {zeroY!==null&&<line x1={Y} y1={zeroY} x2={Y+W} y2={zeroY} stroke={C.textDim} strokeWidth="1.5"/>}
         <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-        {pts&&<polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill={`url(#${safeId})`} clipPath={`url(#cp_${safeId})`}/>}
-        {pts&&<polyline points={pts} fill="none" stroke={col} strokeWidth="1.8" clipPath={`url(#cp_${safeId})`}/>}
+        <g clipPath={`url(#cp_${safeId})`}>
+          {pts&&<polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill={`url(#${safeId})`}/>}
+          {pts&&<polyline points={pts} fill="none" stroke={col} strokeWidth="1.8"/>}
+        </g>
       </svg>
       {dates&&<div style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span style={{fontSize:9,color:C.textDim}}>{dates[0]}</span><span style={{fontSize:9,color:C.textDim}}>{dates[dates.length-1]}</span></div>}
     </div>
@@ -410,7 +414,7 @@ function DistributionPanel({label,distribution,id="dist"}){
         <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
         <Mono style={{fontSize:13,fontWeight:700,color:C.goldText}}>{distribution.reduce((s,b)=>s+(b.count||0),0)} obs</Mono>
       </div>
-      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
+      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="xMidYMid meet">
         {[0,0.5,1].map((p,i)=>{const y=H-P-p*(H-P*2);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.45"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{Math.round(max*p)}</text></g>);})}
         <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
         {distribution.map((b,i)=>{
@@ -1150,7 +1154,7 @@ export default function App(){
                       <div style={{fontSize:13,fontWeight:700}}>Portfolio Value — Last 1Y</div>
                       <div style={{fontSize:10,color:C.textMuted,marginTop:2}}><span style={{color:C.green}}>▬</span> Normal &nbsp;<span style={{color:C.red}}>▬</span> Stress</div>
                     </div>
-                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
+                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="xMidYMid meet">
                       <defs>
                         <linearGradient id="rgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.gold} stopOpacity="0.2"/><stop offset="100%" stopColor={C.gold} stopOpacity="0"/></linearGradient>
                         <clipPath id="rgClip"><rect x={Y} y={0} width={W} height={H}/></clipPath>
@@ -1190,7 +1194,7 @@ export default function App(){
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
                     <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(stress) — Last 1Y</div>
-                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
+                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="xMidYMid meet">
                       <defs><clipPath id="spClip"><rect x={Y} y={0} width={W} height={H}/></clipPath></defs>
                       {[0,0.25,0.5,0.75,1.0].map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={t===0.5?C.textMuted:C.border} strokeWidth={t===0.5?"1.5":"1"} strokeDasharray={t===0.5?"5,3":"3,4"} opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{t.toFixed(2)}</text></g>);})}
                       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
@@ -1259,7 +1263,7 @@ export default function App(){
                           </div>
                         ))}
                       </div>
-                      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="none">
+                      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="xMidYMid meet">
                         {[0,0.5,1].map((p,i)=>{const y=H-P-p*(H-P*2);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,3" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{Math.round(maxC*p)}</text></g>);})}
                         <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
                         {dist.map((b,i)=>{const h=((b.count||0)/maxC)*(H-P*2);return<rect key={i} x={Y+i*bw+0.5} y={H-P-h} width={Math.max(1,bw-1)} height={h} fill={col} opacity="0.85" rx="1"/>;
