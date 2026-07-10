@@ -288,49 +288,60 @@ function BacktestResult({ data }) {
 
 // ── Mean-Variance Optimisation ────────────────────────────────────
 function MVOPanel({ mvo }) {
-  const [view, setView] = useState("weights"); // weights | frontier
+  const [view, setView] = useState("assets"); // assets | weights | frontier
   if (!mvo) return null;
-  const { currentPortfolio:cur, maxSharpePortfolio:ms, minVolPortfolio:mv, frontier } = mvo;
+  const { currentPortfolio:cur, maxSharpePortfolio:ms, minVolPortfolio:mv,
+          assetStats=[], scatterPoints=[], frontier=[] } = mvo;
 
-  // Weight comparison chart
-  const allSyms = [...new Set([...cur.weights.map(w=>w.symbol)])];
-  const msMap   = Object.fromEntries(ms.weights.map(w=>[w.symbol,w.weightPct]));
-  const mvMap   = Object.fromEntries(mv.weights.map(w=>[w.symbol,w.weightPct]));
-  const curMap  = Object.fromEntries(cur.weights.map(w=>[w.symbol,w.weightPct]));
+  const msMap  = Object.fromEntries(ms.weights.map(w=>[w.symbol,w.weightPct]));
+  const mvMap  = Object.fromEntries(mv.weights.map(w=>[w.symbol,w.weightPct]));
+  const curMap = Object.fromEntries(cur.weights.map(w=>[w.symbol,w.weightPct]));
 
-  // Efficient frontier chart
-  const fVols = frontier.map(p=>p.vol);
-  const fRets = frontier.map(p=>p.ret);
-  const minV  = Math.min(...fVols), maxV = Math.max(...fVols);
-  const minR  = Math.min(...fRets), maxR = Math.max(...fRets);
-  const W=340, H=180, PL=42, PR=10, PT=10, PB=30;
+  // Chart bounds from scatter + frontier + key points
+  const allPts = [...scatterPoints, ...frontier,
+    {vol:cur.annVolPct,ret:cur.annRetPct},
+    {vol:ms.annVolPct, ret:ms.annRetPct},
+    {vol:mv.annVolPct, ret:mv.annRetPct}];
+  const minV=Math.min(...allPts.map(p=>p.vol));
+  const maxV=Math.max(...allPts.map(p=>p.vol));
+  const minR=Math.min(...allPts.map(p=>p.ret));
+  const maxR=Math.max(...allPts.map(p=>p.ret));
+  const padV=(maxV-minV)*0.08, padR=(maxR-minR)*0.08;
+  const vMin=minV-padV, vMax=maxV+padV, rMin=minR-padR, rMax=maxR+padR;
+
+  const W=500, H=260, PL=48, PR=14, PT=14, PB=32;
   const pw=W-PL-PR, ph=H-PT-PB;
-  const toX=v=>PL+(v-minV)/(maxV-minV||1)*pw;
-  const toY=r=>PT+(1-(r-minR)/(maxR-minR||1))*ph;
+  const toX=v=>PL+(v-vMin)/(vMax-vMin||1)*pw;
+  const toY=r=>PT+(1-(r-rMin)/(rMax-rMin||1))*ph;
 
-  const statsRow = (label, p, col) => (
-    <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:6}}>
-      <div style={{width:10,height:10,borderRadius:"50%",background:col,flexShrink:0}}/>
-      <div style={{fontSize:11,color:C.textMuted,width:120}}>{label}</div>
-      <div style={{fontSize:11,fontFamily:"monospace",color:C.textPrimary}}>
-        Ret {p.annRetPct}% · Vol {p.annVolPct}% · Sharpe {p.sharpe}
-      </div>
-    </div>
-  );
+  // Frontier polyline
+  const fPts = frontier.map(p=>`${toX(p.vol).toFixed(1)},${toY(p.ret).toFixed(1)}`).join(" ");
+
+  const th = {padding:"4px 8px",color:C.textMuted,fontWeight:600,fontSize:11,borderBottom:`1px solid ${C.border}`,textAlign:"right"};
+  const td = (col,left) => ({padding:"4px 8px",color:col||C.textPrimary,fontSize:11,fontFamily:"monospace",textAlign:left?"left":"right",borderBottom:`1px solid ${C.border}22`});
 
   return (
     <Card style={{marginBottom:12}}>
       <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>Mean-Variance Optimisation</div>
-      <div style={{fontSize:10,color:C.textDim,marginBottom:10}}>{mvo.method}</div>
+      <div style={{fontSize:10,color:C.textDim,marginBottom:8}}>{mvo.method}</div>
 
-      {/* Stats comparison */}
-      {statsRow("Current Portfolio", cur,  C.blue)}
-      {statsRow("Max Sharpe",         ms,   C.green)}
-      {statsRow("Min Volatility",      mv,   C.amber)}
+      {/* Summary stats */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:10}}>
+        {[["Current Portfolio",cur,C.blue],["Max Sharpe",ms,C.green],["Min Volatility",mv,C.amber]].map(([label,p,col])=>(
+          <div key={label} style={{background:C.surface,borderRadius:8,padding:"8px 10px",borderLeft:`3px solid ${col}`}}>
+            <div style={{fontSize:9,color:C.textDim,textTransform:"uppercase",marginBottom:4}}>{label}</div>
+            <div style={{fontSize:11,fontFamily:"monospace"}}>
+              <div>Ret: <span style={{color:p.annRetPct>=0?C.green:C.red,fontWeight:700}}>{p.annRetPct}%</span></div>
+              <div>Vol: <span style={{color:C.textPrimary}}>{p.annVolPct}%</span></div>
+              <div>Sharpe: <span style={{color:p.sharpe>=1?C.green:p.sharpe>=0.5?C.amber:C.red,fontWeight:700}}>{p.sharpe}</span></div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Tab toggle */}
-      <div style={{display:"flex",gap:6,marginBottom:10,marginTop:6}}>
-        {[["weights","Weights"],["frontier","Frontier"]].map(([v,l])=>(
+      <div style={{display:"flex",gap:6,marginBottom:10}}>
+        {[["assets","Per-Asset Stats"],["weights","Weights"],["frontier","Frontier"]].map(([v,l])=>(
           <button key={v} onClick={()=>setView(v)}
             style={{background:view===v?C.goldDim:"transparent",border:`1px solid ${view===v?C.gold:C.border}`,borderRadius:8,padding:"4px 10px",color:view===v?C.gold:C.textMuted,fontSize:11,cursor:"pointer"}}>
             {l}
@@ -338,26 +349,48 @@ function MVOPanel({ mvo }) {
         ))}
       </div>
 
+      {/* Per-asset stats */}
+      {view==="assets" && assetStats.length>0 && (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>
+              {["Asset","1Y Return","Ann. Vol","Sharpe"].map(h=>(
+                <th key={h} style={{...th,textAlign:h==="Asset"?"left":"right"}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {assetStats.map(a=>(
+                <tr key={a.symbol}>
+                  <td style={td(C.textPrimary,true)}><strong>{a.symbol}</strong></td>
+                  <td style={td(a.annRetPct>=0?C.green:C.red)}>{a.annRetPct}%</td>
+                  <td style={td(C.textPrimary)}>{a.annVolPct}%</td>
+                  <td style={td(a.sharpe>=1?C.green:a.sharpe>=0.5?C.amber:C.red)}>{a.sharpe}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Weight comparison */}
       {view==="weights" && (
         <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-            <thead>
-              <tr style={{borderBottom:`1px solid ${C.border}`}}>
-                {["Asset","Current %","Max Sharpe %","Min Vol %","Δ Sharpe"].map(h=>(
-                  <th key={h} style={{padding:"4px 8px",color:C.textMuted,fontWeight:600,textAlign:h==="Asset"?"left":"right"}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>
+              {["Asset","Current","Max Sharpe","Min Vol","Δ→MaxSharpe"].map(h=>(
+                <th key={h} style={{...th,textAlign:h==="Asset"?"left":"right"}}>{h}</th>
+              ))}
+            </tr></thead>
             <tbody>
-              {allSyms.map(sym=>{
+              {cur.weights.map(({symbol:sym})=>{
                 const c=curMap[sym]||0, s=msMap[sym]||0, v=mvMap[sym]||0, d=+(s-c).toFixed(1);
                 return (
-                  <tr key={sym} style={{borderBottom:`1px solid ${C.border}22`}}>
-                    <td style={{padding:"4px 8px",color:C.textPrimary,fontFamily:"monospace",fontWeight:600}}>{sym}</td>
-                    <td style={{padding:"4px 8px",textAlign:"right",color:C.blue}}>{c.toFixed(1)}%</td>
-                    <td style={{padding:"4px 8px",textAlign:"right",color:C.green}}>{s.toFixed(1)}%</td>
-                    <td style={{padding:"4px 8px",textAlign:"right",color:C.amber}}>{v.toFixed(1)}%</td>
-                    <td style={{padding:"4px 8px",textAlign:"right",color:d>0?C.green:d<0?C.red:C.textDim,fontWeight:700}}>{d>0?"+":""}{d}%</td>
+                  <tr key={sym}>
+                    <td style={td(C.textPrimary,true)}><strong>{sym}</strong></td>
+                    <td style={td(C.blue)}>{c.toFixed(1)}%</td>
+                    <td style={td(C.green)}>{s.toFixed(1)}%</td>
+                    <td style={td(C.amber)}>{v.toFixed(1)}%</td>
+                    <td style={td(d>0?C.green:d<0?C.red:C.textDim)}>{d>0?"+":""}{d}%</td>
                   </tr>
                 );
               })}
@@ -366,43 +399,39 @@ function MVOPanel({ mvo }) {
         </div>
       )}
 
-      {view==="frontier" && frontier.length>0 && (
-        <ExpandableChart title="Efficient Frontier" inlineHeight={190}>
+      {/* Efficient frontier */}
+      {view==="frontier" && (
+        <ExpandableChart title="Efficient Frontier" inlineHeight={220}>
           <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"100%",display:"block"}} preserveAspectRatio="xMidYMid meet">
             {/* Gridlines */}
-            {[0.25,0.5,0.75,1].map((t,i)=>{
-              const y=PT+t*ph;
-              const r=minR+(1-t)*(maxR-minR);
+            {[0,0.25,0.5,0.75,1].map((t,i)=>{
+              const y=PT+t*ph, r=rMax-t*(rMax-rMin);
+              const x=PL+t*pw, v=vMin+t*(vMax-vMin);
               return <g key={i}>
-                <line x1={PL} y1={y} x2={W-PR} y2={y} stroke={C.border} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.5"/>
+                <line x1={PL} y1={y} x2={W-PR} y2={y} stroke={C.border} strokeWidth="0.4" strokeDasharray="2,4" opacity="0.5"/>
                 <text x={PL-4} y={y+3} fontSize="9" fill={C.textMuted} textAnchor="end">{r.toFixed(1)}%</text>
+                <line x1={x} y1={PT} x2={x} y2={PT+ph} stroke={C.border} strokeWidth="0.4" strokeDasharray="2,4" opacity="0.5"/>
+                <text x={x} y={H-6} fontSize="9" fill={C.textMuted} textAnchor="middle">{v.toFixed(1)}%</text>
               </g>;
             })}
-            {[0.25,0.5,0.75,1].map((t,i)=>{
-              const x=PL+t*pw;
-              const v=minV+t*(maxV-minV);
-              return <g key={i}>
-                <line x1={x} y1={PT} x2={x} y2={PT+ph} stroke={C.border} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.5"/>
-                <text x={x} y={H-8} fontSize="9" fill={C.textMuted} textAnchor="middle">{v.toFixed(1)}%</text>
-              </g>;
-            })}
-            {/* Frontier scatter */}
-            {frontier.map((p,i)=>(
-              <circle key={i} cx={toX(p.vol)} cy={toY(p.ret)} r="1.5"
-                fill={p.sharpe > ms.sharpe*0.8 ? C.green : C.blue} opacity="0.4"/>
+            {/* Scatter points */}
+            {scatterPoints.map((p,i)=>(
+              <circle key={i} cx={toX(p.vol)} cy={toY(p.ret)} r="1.2"
+                fill={p.sharpe>ms.sharpe*0.85?C.green:C.blue} opacity="0.25"/>
             ))}
-            {/* Current portfolio */}
-            <circle cx={toX(cur.annVolPct)} cy={toY(cur.annRetPct)} r="5" fill={C.blue} stroke="#fff" strokeWidth="1"/>
-            <text x={toX(cur.annVolPct)+7} y={toY(cur.annRetPct)+3} fontSize="9" fill={C.blue} fontWeight="bold">Current</text>
+            {/* Efficient frontier LINE */}
+            {fPts && <polyline points={fPts} fill="none" stroke={C.green} strokeWidth="2" opacity="0.8"/>}
+            {/* Current */}
+            <circle cx={toX(cur.annVolPct)} cy={toY(cur.annRetPct)} r="6" fill={C.blue} stroke="#fff" strokeWidth="1.5"/>
+            <text x={toX(cur.annVolPct)+9} y={toY(cur.annRetPct)+4} fontSize="10" fill={C.blue} fontWeight="bold">Current</text>
             {/* Max Sharpe */}
-            <circle cx={toX(ms.annVolPct)} cy={toY(ms.annRetPct)} r="5" fill={C.green} stroke="#fff" strokeWidth="1"/>
-            <text x={toX(ms.annVolPct)+7} y={toY(ms.annRetPct)+3} fontSize="9" fill={C.green} fontWeight="bold">Max Sharpe</text>
+            <circle cx={toX(ms.annVolPct)} cy={toY(ms.annRetPct)} r="6" fill={C.green} stroke="#fff" strokeWidth="1.5"/>
+            <text x={toX(ms.annVolPct)+9} y={toY(ms.annRetPct)+4} fontSize="10" fill={C.green} fontWeight="bold">Max Sharpe</text>
             {/* Min Vol */}
-            <circle cx={toX(mv.annVolPct)} cy={toY(mv.annRetPct)} r="5" fill={C.amber} stroke="#fff" strokeWidth="1"/>
-            <text x={toX(mv.annVolPct)+7} y={toY(mv.annRetPct)+3} fontSize="9" fill={C.amber} fontWeight="bold">Min Vol</text>
+            <circle cx={toX(mv.annVolPct)} cy={toY(mv.annRetPct)} r="6" fill={C.amber} stroke="#fff" strokeWidth="1.5"/>
+            <text x={toX(mv.annVolPct)+9} y={toY(mv.annRetPct)+4} fontSize="10" fill={C.amber} fontWeight="bold">Min Vol</text>
             {/* Axis labels */}
-            <text x={W/2} y={H-1} fontSize="9" fill={C.textDim} textAnchor="middle">Annualised Volatility %</text>
-            <text x={8} y={PT+ph/2} fontSize="9" fill={C.textDim} textAnchor="middle" transform={`rotate(-90,8,${PT+ph/2})`}>Return %</text>
+            <text x={PL+pw/2} y={H-1} fontSize="10" fill={C.textDim} textAnchor="middle">Annualised Volatility %</text>
           </svg>
         </ExpandableChart>
       )}
