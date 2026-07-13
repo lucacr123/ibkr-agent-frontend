@@ -58,7 +58,7 @@ function MVOPanel({ mvo }) {
   const maxV=Math.max(...allPts.map(p=>p.vol));
   const minR=Math.min(...allPts.map(p=>p.ret));
   const maxR=Math.max(...allPts.map(p=>p.ret));
-  const padV=(maxV-minV)*0.08, padR=(maxR-minR)*0.08;
+  const padV=(maxV-minV)*0.02, padR=(maxR-minR)*0.02;
   const vMin=minV-padV, vMax=maxV+padV, rMin=minR-padR, rMax=maxR+padR;
 
   const W=500, H=260, PL=48, PR=14, PT=14, PB=32;
@@ -197,15 +197,21 @@ function MVOPanel({ mvo }) {
 // ═══════════════════════════════════════════════════════════════════
 
 function niceTicks(min, max, n=5) {
-  const range = max - min || 1;
+  if (min === max) { return [min - 1, min, min + 1]; }
+  const range = max - min;
   const rough = range / n;
   const mag   = Math.pow(10, Math.floor(Math.log10(rough)));
   const norm  = rough / mag;
   const step  = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10;
-  const s     = Math.floor(min / (step*mag)) * (step*mag);
+  const s     = step * mag;
+  // Start from first tick AT OR ABOVE min, end at last tick AT OR BELOW max
+  const first = Math.ceil(min / s) * s;
   const ticks = [];
-  for (let v = s; v <= max + step*mag*0.01; v += step*mag)
+  for (let v = first; v <= max + s * 0.001; v += s)
     ticks.push(+v.toFixed(10));
+  // Always include min and max so axis fits data exactly
+  if (ticks[0] > min) ticks.unshift(+min.toFixed(4));
+  if (ticks[ticks.length-1] < max) ticks.push(+max.toFixed(4));
   return ticks;
 }
 
@@ -228,8 +234,7 @@ function LineChart({ values, dates, color, id="lc", showZero=false, yFmt, height
   if (!vals.length) return null;
 
   const vMin0 = Math.min(...vals), vMax0 = Math.max(...vals);
-  const pad   = (vMax0 - vMin0) * 0.06 || 1;
-  const ticks = niceTicks(vMin0 - pad, vMax0 + pad);
+  const ticks = niceTicks(vMin0, vMax0);
   const vMin  = ticks[0], vMax = ticks[ticks.length-1], vRange = vMax - vMin || 1;
 
   const W = 320, H = height, PL = 46, PR = 8, PT = 8, PB = 28;
@@ -302,9 +307,11 @@ function LineChart({ values, dates, color, id="lc", showZero=false, yFmt, height
 // ── Price chart ───────────────────────────────────────────────────
 function PriceChart({bars, height=160, id="pc"}) {
   if (!bars?.length) return null;
-  const closes = bars.map(b => parseFloat(b.close));
+  const closes = bars.map(b => { const v = parseFloat(b.close); return isNaN(v) ? null : v; });
   const dates  = bars.map(b => b.date);
-  const col    = closes[closes.length-1] >= closes[0] ? C.green : C.red;
+  const valid  = closes.filter(v => v !== null);
+  if (!valid.length) return null;
+  const col = valid[valid.length-1] >= valid[0] ? C.green : C.red;
   return (
     <ExpandableChart title="Price chart" inlineHeight={height}>
       <LineChart values={closes} dates={dates} color={col} id={id} height={height} yFmt={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(2)}/>
