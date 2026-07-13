@@ -945,30 +945,36 @@ export default function App(){
 
               {portfolioView==="u1"&&acct1&&(
                 <>
-                  <Card style={{padding:"16px",marginBottom:10}}>
+                  <Card style={{padding:"16px"}}>
                     <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>EUR Account · U11354150</div>
-                    <Mono style={{fontSize:22,fontWeight:700,color:C.goldText}}>{fmtEUR(acct1.netLiquidation)}</Mono>
+                    <Mono style={{fontSize:24,fontWeight:700,color:C.goldText}}>{fmtEUR(acct1.netLiquidation)}</Mono>
                     <div style={{marginTop:6}}>
                       <div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN (IBKR)</div>
                       <Mono style={{fontSize:14,fontWeight:700,color:acct1.ytdReturn>=0?C.green:C.red}}>{acct1.ytdReturn>0?"+":""}{acct1.ytdReturn?.toFixed(2)}%</Mono>
                       <div style={{fontSize:9,color:C.textDim,marginTop:2}}>Actual broker return incl. cash, fees & FX</div>
                     </div>
                   </Card>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
-                    {[{label:"Cash",val:fmtEUR(acct1.cash)},{label:"Stock Value",val:fmtEUR(acct1.stockValue)},{label:"Unrealized P&L",val:acct1.unrealizedPnl,isPnl:true},{label:"Dividends (1Y)",val:fmtEUR(acct1.dividends)}].map(s=>(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14,marginTop:9}}>
+                    {[{label:"Cash",val:fmtEUR(acct1.cash)},{label:"Stock Value",val:fmtEUR(acct1.stockValue)},{label:"Unrealized P&L",val:acct1.unrealizedPnl,isPnl:true},{label:"Dividends (1Y)",val:fmtEUR(acct1.dividends)},{label:"Commissions",val:fmtEUR(acct1.commissions)},{label:"Net Deposits (1Y)",val:fmtEUR(acct1.netDeposits||0)}].map(s=>(
                       <Card key={s.label} style={{padding:"12px 14px"}}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div>{s.isPnl?<PnlText value={s.val} style={{fontSize:15}}/>:<Mono style={{fontSize:15,fontWeight:700}}>{s.val}</Mono>}</Card>
                     ))}
                   </div>
                   {acct1.metrics1Y&&(<>
-                    <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 0 8px"}}>1Y risk metrics (model)</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:10}}>
+                    <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 0 8px"}}>1Y Risk Metrics (model)</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:8}}>
                       {[
-                        {label:"Sharpe",val:acct1.metrics1Y.sharpe?.toFixed(2),color:acct1.metrics1Y.sharpe>1?C.green:acct1.metrics1Y.sharpe<0?C.red:C.amber},
-                        {label:"1Y Return",val:acct1.metrics1Y.annualizedReturnPct?.toFixed(1)+"%",color:acct1.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
-                        {label:"Ann. Vol",val:acct1.metrics1Y.annualizedVolPct?.toFixed(1)+"%",color:C.textPrimary},
-                        {label:"Max DD",val:acct1.metrics1Y.maxDrawdownPct?.toFixed(1)+"%",color:C.red},
-                        {label:"VaR 95",val:acct1.metrics1Y.var95Pct?.toFixed(2)+"%",color:C.red},
-                        {label:"CVaR 95",val:acct1.metrics1Y.cvar95Pct?.toFixed(2)+"%",color:C.red},
+                        {label:"Sharpe",       val:acct1.metrics1Y.sharpe?.toFixed(2),           color:acct1.metrics1Y.sharpe>1?C.green:acct1.metrics1Y.sharpe<0?C.red:C.amber},
+                        {label:"1Y Rtn (mdl)", val:acct1.metrics1Y.annualizedReturnPct?.toFixed(1)+"%", color:acct1.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
+                        {label:"Max DD",       val:acct1.metrics1Y.maxDrawdownPct?.toFixed(1)+"%", color:C.red},
+                        {label:"Ann. Vol",     val:acct1.metrics1Y.annualizedVolPct?.toFixed(1)+"%", color:C.textPrimary},
+                        {label:"Sortino",      val:acct1.metrics1Y.sortino?.toFixed(2),           color:acct1.metrics1Y.sortino>1?C.green:C.amber},
+                        {label:"Calmar",       val:acct1.metrics1Y.calmar?.toFixed(2),            color:C.gold},
+                        {label:"VaR 95",       val:acct1.metrics1Y.var95Pct?.toFixed(2)+"%",      color:C.red},
+                        {label:"CVaR 95",      val:acct1.metrics1Y.cvar95Pct?.toFixed(2)+"%",     color:C.red},
+                        {label:"Z-score (30d)",val:acct1.metrics1Y.zScore30d?.toFixed(2),         color:acct1.metrics1Y.zScore30d>2?C.red:acct1.metrics1Y.zScore30d<-2?C.green:C.amber},
+                        {label:"Skewness",     val:acct1.metrics1Y.skewness?.toFixed(2),          color:acct1.metrics1Y.skewness<0?C.red:C.green},
+                        {label:"Kurtosis",     val:acct1.metrics1Y.kurtosis?.toFixed(2),          color:C.amber},
+                        {label:"Info Ratio",   val:acct1.metrics1Y.informationRatioVsSPX?.toFixed(2), color:C.blue},
                       ].map(st=>(
                         <Card key={st.label} style={{padding:"10px 8px",textAlign:"center"}}>
                           <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{st.label}</div>
@@ -976,8 +982,28 @@ export default function App(){
                         </Card>
                       ))}
                     </div>
+                    <div style={{fontSize:10,color:C.textDim,margin:"-2px 0 10px"}}>1Y Return (model) = hypothetical at current weights × Yahoo closes. All metrics: 252 days, geometric annualisation, SOFR risk-free.</div>
                     {acct1.metrics1Y.drawdownSeries&&<QuantPanel label="Drawdown % from peak" series={acct1.metrics1Y.drawdownSeries} dates={acct1.metrics1Y.dates} color={C.red} showZero={false} id="u1_drawdown"/>}
-                    {acct1.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={acct1.metrics1Y.dates.map((date,i)=>({date,close:acct1.metrics1Y.portfolioIndex[i]}))} height={160} id="u1_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>EUR account holdings × 1Y daily returns (model, start = 100)</div></div>}
+                    {acct1.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={acct1.metrics1Y.dates.map((date,i)=>({date,close:acct1.metrics1Y.portfolioIndex[i]}))} height={160} id="u1_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>EUR account equity index (current weights × 1Y daily returns). Start = 100.</div></div>}
+                    {acct1.metrics1Y.pca&&(()=>{
+                      const{components,nAssets,totalVarianceExplainedPct}=acct1.metrics1Y.pca;
+                      return(<Card style={{padding:"14px 14px 10px",marginBottom:10}}>
+                        <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>PCA — Principal Component Analysis</div>
+                        <div style={{fontSize:11,color:C.textMuted,marginBottom:10}}>{components.length} components explain {totalVarianceExplainedPct}% of variance across {nAssets} holdings</div>
+                        {components.map(c=>{const maxAbs=Math.max(...c.loadings.map(l=>Math.abs(l.loading)),0.01);return(
+                          <div key={c.pc} style={{marginBottom:10}}>
+                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:C.gold}}>PC{c.pc}</span><span style={{fontSize:11,color:C.textMuted}}>{c.varExplainedPct}% var · cum {c.cumVarExplainedPct}%</span></div>
+                            {c.loadings.sort((a,b)=>Math.abs(b.loading)-Math.abs(a.loading)).map(l=>{const w=Math.abs(l.loading)/maxAbs*100;const col=l.loading>=0?C.green:C.red;return(
+                              <div key={l.symbol} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                                <Mono style={{fontSize:10,color:C.textMuted,width:55,flexShrink:0}}>{l.symbol}</Mono>
+                                <div style={{flex:1,background:C.border,borderRadius:3,height:10,position:"relative",overflow:"hidden"}}><div style={{position:"absolute",left:l.loading>=0?"50%":`${50-w/2}%`,width:`${w/2}%`,height:"100%",background:col,opacity:0.85}}/><div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:C.textDim}}/></div>
+                                <Mono style={{fontSize:10,color:col,width:42,textAlign:"right",flexShrink:0}}>{l.loading>=0?"+":""}{l.loading.toFixed(2)}</Mono>
+                              </div>
+                            );})}
+                          </div>
+                        );})}
+                      </Card>);
+                    })()}
                   </>)}
                   <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"8px 0 8px"}}>Positions</div>
                   {acct1.positions.map(p=>(
@@ -988,9 +1014,9 @@ export default function App(){
 
               {portfolioView==="u2"&&acct2&&(
                 <>
-                  <Card style={{padding:"16px",marginBottom:10}}>
+                  <Card style={{padding:"16px"}}>
                     <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>GBP Account · U9733561 (ISA)</div>
-                    <Mono style={{fontSize:22,fontWeight:700,color:C.goldText}}>{fmtGBP(acct2.netLiquidation)}</Mono>
+                    <Mono style={{fontSize:24,fontWeight:700,color:C.goldText}}>{fmtGBP(acct2.netLiquidation)}</Mono>
                     <div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{fmtEUR(acct2.netLiquidationEUR)} in EUR</div>
                     <div style={{marginTop:6}}>
                       <div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN (IBKR)</div>
@@ -998,21 +1024,27 @@ export default function App(){
                       <div style={{fontSize:9,color:C.textDim,marginTop:2}}>Actual broker return incl. cash, fees & FX</div>
                     </div>
                   </Card>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
-                    {[{label:"Cash (GBP)",val:fmtGBP(acct2.cash)},{label:"Stock Value",val:fmtGBP(acct2.stockValue)},{label:"Unrealized P&L",val:acct2.unrealizedPnl,isPnl:true},{label:"Dividends (1Y)",val:fmtGBP(acct2.dividends)}].map(s=>(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14,marginTop:9}}>
+                    {[{label:"Cash (GBP)",val:fmtGBP(acct2.cash)},{label:"Stock Value",val:fmtGBP(acct2.stockValue)},{label:"Unrealized P&L",val:acct2.unrealizedPnl,isPnl:true},{label:"Dividends (1Y)",val:fmtGBP(acct2.dividends)},{label:"Commissions",val:fmtGBP(acct2.commissions)},{label:"Net Deposits (1Y)",val:fmtGBP(acct2.netDeposits||0)}].map(s=>(
                       <Card key={s.label} style={{padding:"12px 14px"}}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div>{s.isPnl?<PnlText value={s.val} style={{fontSize:15}}/>:<Mono style={{fontSize:15,fontWeight:700}}>{s.val}</Mono>}</Card>
                     ))}
                   </div>
                   {acct2.metrics1Y&&(<>
-                    <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 0 8px"}}>1Y risk metrics (model)</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:10}}>
+                    <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 0 8px"}}>1Y Risk Metrics (model)</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:8}}>
                       {[
-                        {label:"Sharpe",val:acct2.metrics1Y.sharpe?.toFixed(2),color:acct2.metrics1Y.sharpe>1?C.green:acct2.metrics1Y.sharpe<0?C.red:C.amber},
-                        {label:"1Y Return",val:acct2.metrics1Y.annualizedReturnPct?.toFixed(1)+"%",color:acct2.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
-                        {label:"Ann. Vol",val:acct2.metrics1Y.annualizedVolPct?.toFixed(1)+"%",color:C.textPrimary},
-                        {label:"Max DD",val:acct2.metrics1Y.maxDrawdownPct?.toFixed(1)+"%",color:C.red},
-                        {label:"VaR 95",val:acct2.metrics1Y.var95Pct?.toFixed(2)+"%",color:C.red},
-                        {label:"CVaR 95",val:acct2.metrics1Y.cvar95Pct?.toFixed(2)+"%",color:C.red},
+                        {label:"Sharpe",       val:acct2.metrics1Y.sharpe?.toFixed(2),           color:acct2.metrics1Y.sharpe>1?C.green:acct2.metrics1Y.sharpe<0?C.red:C.amber},
+                        {label:"1Y Rtn (mdl)", val:acct2.metrics1Y.annualizedReturnPct?.toFixed(1)+"%", color:acct2.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
+                        {label:"Max DD",       val:acct2.metrics1Y.maxDrawdownPct?.toFixed(1)+"%", color:C.red},
+                        {label:"Ann. Vol",     val:acct2.metrics1Y.annualizedVolPct?.toFixed(1)+"%", color:C.textPrimary},
+                        {label:"Sortino",      val:acct2.metrics1Y.sortino?.toFixed(2),           color:acct2.metrics1Y.sortino>1?C.green:C.amber},
+                        {label:"Calmar",       val:acct2.metrics1Y.calmar?.toFixed(2),            color:C.gold},
+                        {label:"VaR 95",       val:acct2.metrics1Y.var95Pct?.toFixed(2)+"%",      color:C.red},
+                        {label:"CVaR 95",      val:acct2.metrics1Y.cvar95Pct?.toFixed(2)+"%",     color:C.red},
+                        {label:"Z-score (30d)",val:acct2.metrics1Y.zScore30d?.toFixed(2),         color:acct2.metrics1Y.zScore30d>2?C.red:acct2.metrics1Y.zScore30d<-2?C.green:C.amber},
+                        {label:"Skewness",     val:acct2.metrics1Y.skewness?.toFixed(2),          color:acct2.metrics1Y.skewness<0?C.red:C.green},
+                        {label:"Kurtosis",     val:acct2.metrics1Y.kurtosis?.toFixed(2),          color:C.amber},
+                        {label:"Info Ratio",   val:acct2.metrics1Y.informationRatioVsSPX?.toFixed(2), color:C.blue},
                       ].map(st=>(
                         <Card key={st.label} style={{padding:"10px 8px",textAlign:"center"}}>
                           <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{st.label}</div>
@@ -1020,8 +1052,28 @@ export default function App(){
                         </Card>
                       ))}
                     </div>
+                    <div style={{fontSize:10,color:C.textDim,margin:"-2px 0 10px"}}>1Y Return (model) = hypothetical at current weights × Yahoo closes. All metrics: 252 days, geometric annualisation, SOFR risk-free.</div>
                     {acct2.metrics1Y.drawdownSeries&&<QuantPanel label="Drawdown % from peak" series={acct2.metrics1Y.drawdownSeries} dates={acct2.metrics1Y.dates} color={C.red} showZero={false} id="u2_drawdown"/>}
-                    {acct2.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={acct2.metrics1Y.dates.map((date,i)=>({date,close:acct2.metrics1Y.portfolioIndex[i]}))} height={160} id="u2_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>GBP account holdings × 1Y daily returns (model, start = 100)</div></div>}
+                    {acct2.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={acct2.metrics1Y.dates.map((date,i)=>({date,close:acct2.metrics1Y.portfolioIndex[i]}))} height={160} id="u2_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>GBP account equity index (current weights × 1Y daily returns). Start = 100.</div></div>}
+                    {acct2.metrics1Y.pca&&(()=>{
+                      const{components,nAssets,totalVarianceExplainedPct}=acct2.metrics1Y.pca;
+                      return(<Card style={{padding:"14px 14px 10px",marginBottom:10}}>
+                        <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>PCA — Principal Component Analysis</div>
+                        <div style={{fontSize:11,color:C.textMuted,marginBottom:10}}>{components.length} components explain {totalVarianceExplainedPct}% of variance across {nAssets} holdings</div>
+                        {components.map(c=>{const maxAbs=Math.max(...c.loadings.map(l=>Math.abs(l.loading)),0.01);return(
+                          <div key={c.pc} style={{marginBottom:10}}>
+                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:C.gold}}>PC{c.pc}</span><span style={{fontSize:11,color:C.textMuted}}>{c.varExplainedPct}% var · cum {c.cumVarExplainedPct}%</span></div>
+                            {c.loadings.sort((a,b)=>Math.abs(b.loading)-Math.abs(a.loading)).map(l=>{const w=Math.abs(l.loading)/maxAbs*100;const col=l.loading>=0?C.green:C.red;return(
+                              <div key={l.symbol} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                                <Mono style={{fontSize:10,color:C.textMuted,width:55,flexShrink:0}}>{l.symbol}</Mono>
+                                <div style={{flex:1,background:C.border,borderRadius:3,height:10,position:"relative",overflow:"hidden"}}><div style={{position:"absolute",left:l.loading>=0?"50%":`${50-w/2}%`,width:`${w/2}%`,height:"100%",background:col,opacity:0.85}}/><div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:C.textDim}}/></div>
+                                <Mono style={{fontSize:10,color:col,width:42,textAlign:"right",flexShrink:0}}>{l.loading>=0?"+":""}{l.loading.toFixed(2)}</Mono>
+                              </div>
+                            );})}
+                          </div>
+                        );})}
+                      </Card>);
+                    })()}
                   </>)}
                   <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"8px 0 8px"}}>Positions</div>
                   {acct2.positions.map(p=>(
@@ -1160,7 +1212,7 @@ export default function App(){
       {/* ══ REGIME ════════════════════════════════════════════════ */}
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
-          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · 2-State HMM · VIX + MOVE{regimeData?.useDxst?" + DXST.DE vol":""} · 5Y full-sample</div>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · 2-State Hidden Markov Model · 5Y Training Window</div>
           {!regimeData&&!regimeLoading&&!regimeError&&(
             <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>🔴 Run HMM Regime Detection</button>
           )}
@@ -1168,7 +1220,7 @@ export default function App(){
             <div style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:28,marginBottom:12}}>⏳</div>
               <div style={{color:C.textMuted,fontSize:14,fontWeight:600}}>Fitting HMM model…</div>
-              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX + MOVE + DXST.DE<br/>Running Baum-Welch EM · 100 iterations<br/>~20 seconds</div>
+              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX + MOVE data<br/>Running Baum-Welch EM · 100 iterations<br/>~15–25 seconds</div>
             </div>
           )}
           {regimeError&&(
@@ -1327,23 +1379,27 @@ export default function App(){
               {/* Feature means */}
               {stateMeans&&(
                 <Card style={{padding:"12px 14px 10px"}}>
-                  <div style={{fontSize:12,fontWeight:700,color:C.textMuted,marginBottom:8}}>Feature means by regime (5Y)</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                    {["VIX","MOVE","DXST_ann_vol(iTraxx)"].map(f=>(
-                      <div key={f} style={{background:C.surfaceHigh,borderRadius:8,padding:"8px 10px"}}>
-                        <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>{f}</div>
-                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                          <Mono style={{fontSize:11,color:C.green}}>{stateMeans[0]?.[f]??'—'}</Mono>
-                          <span style={{fontSize:9,color:C.textDim}}>vs</span>
-                          <Mono style={{fontSize:11,color:C.red}}>{stateMeans[1]?.[f]??'—'}</Mono>
-                        </div>
-                      </div>
-                    ))}
+                  <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>Feature Averages by Regime (5Y)</div>
+                  <div style={{fontSize:10,color:C.textDim,marginBottom:10}}>Average value of each model input in Normal vs Stress periods. Higher VIX/MOVE = more stressed markets.</div>
+                  <div style={{display:"flex",marginBottom:6,gap:8}}>
+                    <span style={{flex:1,fontSize:10,color:C.textDim}}></span>
+                    <Mono style={{fontSize:10,color:C.green,width:60,textAlign:"center"}}>🟢 Normal</Mono>
+                    <Mono style={{fontSize:10,color:C.red,width:60,textAlign:"center"}}>🔴 Stress</Mono>
                   </div>
+                  {(useDxst?["VIX","MOVE","DXST_ann_vol(iTraxx)"]:["VIX","MOVE"]).map((f,fi)=>{
+                    const labels=["VIX","MOVE","DXST 30d Vol %"];
+                    return(
+                      <div key={f} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${C.border}`}}>
+                        <span style={{flex:1,fontSize:11,color:C.textMuted}}>{labels[fi]||f}</span>
+                        <Mono style={{fontSize:12,fontWeight:600,color:C.green,width:60,textAlign:"center"}}>{stateMeans[0]?.[f]??'—'}</Mono>
+                        <Mono style={{fontSize:12,fontWeight:600,color:C.red,width:60,textAlign:"center"}}>{stateMeans[1]?.[f]??'—'}</Mono>
+                      </div>
+                    );
+                  })}
                 </Card>
               )}
 
-              <div style={{fontSize:10,color:C.textDim,padding:"6px 0",lineHeight:1.5}}>{method}</div>
+              <div style={{fontSize:10,color:C.textDim,padding:"6px 0 2px",lineHeight:1.6}}>Model: {useDxst?"VIX + MOVE + DXST.DE 30d vol":"VIX + MOVE"} · Diagonal-covariance Gaussian HMM · Baum-Welch EM 100 iterations · Full 5Y training · Regime 0 = Normal, 1 = Stress (labelled by higher VIX mean)</div>
               <button onClick={loadRegime} style={{width:"100%",marginTop:4,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:11,color:C.textMuted,fontSize:13,cursor:"pointer"}}>↻ Re-run model</button>
             </>);
           })()}
