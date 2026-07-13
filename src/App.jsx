@@ -36,255 +36,7 @@ function niceStep(r,t=5){const raw=r/t;const mag=Math.pow(10,Math.floor(Math.log
 function yTicks(min,max){const step=niceStep(max-min||1,4);const start=Math.floor(min/step)*step;const r=[];for(let v=start;v<=max+step*0.1;v+=step)r.push(+v.toFixed(10));return r;}
 function fmtTick(v){const a=Math.abs(v);if(a>=1000)return(v/1000).toFixed(1)+"k";if(a>=1)return v%1===0?v.toFixed(0):v.toFixed(2);return v.toFixed(3);}
 
-// ── Core chart (price line) ───────────────────────────────────────
-
-function BacktestChart({ values, dates, color, id, yFormat, yLines=[], isNegativeArea=false, isExpanded=false }) {
-  if (!values?.length) return null;
-  const W = 700, H = isExpanded ? 480 : 280;
-  const PL=62, PR=14, PT=20, PB=32, plotW=W-PL-PR, plotH=H-PT-PB;
-  const finite = values.filter(Number.isFinite);
-  let vMin=Math.min(...finite), vMax=Math.max(...finite);
-  yLines.forEach(l=>{ if(Number.isFinite(l.value)){ if(l.value<vMin)vMin=l.value; if(l.value>vMax)vMax=l.value; }});
-  if (isNegativeArea){ vMax=0; vMin=vMin*1.1||-.01; }
-  else if(vMin===vMax){ vMin-=1; vMax+=1; }
-  else { const p=(vMax-vMin)*.08; vMin-=p; vMax+=p; }
-  function niceTicks(mn,mx,n=5){ const r=mx-mn; const mag=Math.pow(10,Math.floor(Math.log10(r/n))); const nm=r/n/mag; const st=nm<1.5?1:nm<3?2:nm<7?5:10; const s=Math.floor(mn/(st*mag))*(st*mag); const tks=[]; for(let v=s;v<=mx+st*mag*.5;v+=st*mag) tks.push(+v.toFixed(10)); return tks; }
-  const ticks=niceTicks(vMin,vMax); vMin=ticks[0]; vMax=ticks[ticks.length-1];
-  const rng=vMax-vMin||1;
-  const toX=i=>PL+(i/(values.length-1||1))*plotW;
-  const toY=v=>PT+(1-(Math.max(vMin,Math.min(vMax,v))-vMin)/rng)*plotH;
-  const pts=values.map((v,i)=>`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
-  const fmt=yFormat||(v=>v.toFixed(1));
-  const clip=`clip_${id}`;
-  const nXTicks=Math.min(7, Math.floor(W/100));
-  const xTicks=dates?Array.from({length:nXTicks+1},(_,i)=>{ const idx=Math.floor(i/nXTicks*(values.length-1)); return {x:toX(idx),label:dates[idx]?.slice(0,7)||""}; }):[];
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"100%",display:"block"}} preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <clipPath id={clip}><rect x={PL} y={PT} width={plotW} height={plotH}/></clipPath>
-        <linearGradient id={`g_${id}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28"/><stop offset="100%" stopColor={color} stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      <rect x={PL} y={PT} width={plotW} height={plotH} fill={C.surface} opacity="0.3"/>
-      {ticks.map((v,i)=>(
-        <g key={i}>
-          <line x1={PL} y1={toY(v)} x2={W-PR} y2={toY(v)} stroke={C.border} strokeWidth="0.5" strokeDasharray={v===0?"":"2,4"} opacity="0.5"/>
-          <text x={PL-5} y={toY(v)+4} fontSize="10" fill={C.textMuted} textAnchor="end">{fmt(v)}</text>
-        </g>
-      ))}
-      {yLines.map((l,i)=>Number.isFinite(l.value)&&l.value>=vMin&&l.value<=vMax?(
-        <g key={`yl${i}`}>
-          <line x1={PL} y1={toY(l.value)} x2={W-PR} y2={toY(l.value)} stroke={l.color||C.amber} strokeWidth="1.2" strokeDasharray="5,3" opacity="0.9"/>
-          <text x={W-PR-4} y={toY(l.value)-3} fontSize="10" fill={l.color||C.amber} textAnchor="end" fontWeight="bold">{l.label||fmt(l.value)}</text>
-        </g>
-      ):null)}
-      <g clipPath={`url(#${clip})`}>
-        {isNegativeArea
-          ? <polygon points={`${toX(0)},${toY(0)} ${pts} ${toX(values.length-1)},${toY(0)}`} fill={color} opacity="0.22"/>
-          : <polygon points={`${toX(0)},${toY(vMin)} ${pts} ${toX(values.length-1)},${toY(vMin)}`} fill={`url(#g_${id})`}/>
-        }
-        <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8"/>
-      </g>
-      <line x1={PL} y1={PT} x2={PL} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
-      <line x1={PL} y1={PT+plotH} x2={W-PR} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
-      {xTicks.map((t,i)=><text key={i} x={t.x} y={H-8} fontSize="10" fill={C.textMuted} textAnchor="middle">{t.label}</text>)}
-    </svg>
-  );
-}
-
-function BacktestResult({ data }) {
-  const [exporting, setExporting] = useState(false);
-  const [exported,  setExported]  = useState(false);
-  if (!data?.equityCurve?.length) return null;
-  const { label, metrics:m, equityCurve, drawdownCurve, signalSeries, exitSignalSeries,
-          triggerDates=[], signalBreachDates=[], trades=[], dates } = data;
-
-  const eqVals = equityCurve.map(p=>p.value);
-  const ddVals = drawdownCurve.map(p=>p.value);
-  const eqCol  = eqVals[eqVals.length-1]>=100 ? C.green : C.red;
-
-  const metricCards = [
-    ["Total Return",  `${m.totalReturnPct}%`,     m.totalReturnPct>=0?C.green:C.red],
-    ["Ann. Return",   `${m.annualizedRetPct}%`,    m.annualizedRetPct>=0?C.green:C.red],
-    ["Ann. Vol",      `${m.annualizedVolPct}%`,    C.textPrimary],
-    ["Max Drawdown",  `${m.maxDrawdownPct}%`,      C.red],
-    ["Sharpe",        m.sharpe,                    m.sharpe>=1?C.green:m.sharpe>=0.5?C.amber:C.red],
-    ["Sortino",       m.sortino,                   m.sortino>=1?C.green:C.amber],
-    ["Calmar",        m.calmar,                    C.gold],
-    ["VaR 95%/day",   `${m.var95DailyPct}%`,      C.red],
-    ["% in Market",   `${m.pctTimeInMarket}%`,     C.blue],
-    ["N Trades",      m.nTrades,                   C.textPrimary],
-    ["Win Rate",      `${m.winRatePct}%`,           m.winRatePct>=50?C.green:C.red],
-    ["EV/Trade",      `${m.evPerTradePct}%`,        m.evPerTradePct>=0?C.green:C.red],
-    ["Cond EV Win",   `${m.condEvWinPct}%`,         C.green],
-    ["Cond EV Loss",  `${m.condEvLossPct}%`,        C.red],
-    ["Trade σ",       `${m.tradeRetStdPct}%`,       C.textPrimary],
-    ["Avg Duration",  `${m.avgDurationDays}d`,      C.textPrimary],
-    ["Profit Factor", m.profitFactor??"-",           (m.profitFactor||0)>=1?C.green:C.red],
-  ];
-
-  const entryTh = data.entry_threshold;
-  const exitTh  = data.exit_threshold;
-  const sigDir  = data.signal_direction;
-  const sigLines = data.signal_type!=="buy_hold" ? [
-    {value: sigDir==="momentum"? entryTh:-entryTh, color:C.green, label:`entry ${sigDir==="momentum"?entryTh:-entryTh}`},
-    {value: exitTh, color:C.red, label:`exit ${exitTh}`},
-    {value:0, color:C.border, label:"0"},
-  ] : [];
-
-  const thStyle = {padding:"4px 10px",color:C.textMuted,fontWeight:600,textAlign:"left",fontSize:11,borderBottom:`1px solid ${C.border}`};
-  const tdStyle = (col) => ({padding:"4px 10px",color:col||C.textPrimary,fontSize:11,fontFamily:"monospace",borderBottom:`1px solid ${C.border}22`});
-
-  async function emailExport() {
-    setExporting(true);
-    try {
-      const r = await fetch(`${BACKEND}/api/backtest/email`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({backtestResult:data})});
-      if(r.ok) setExported(true); else alert("Email failed");
-    } catch(e){ alert("Error: "+e.message); }
-    setExporting(false);
-  }
-
-  return (
-    <div style={{marginTop:12,background:C.surfaceHigh,borderRadius:14,padding:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-      {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.gold}}>{label} · {m.nYears}Y · {data.signal_type}</div>
-        <button onClick={emailExport} disabled={exporting||exported}
-          style={{background:exported?"#1A2A1A":C.goldDim,border:`1px solid ${exported?C.green:C.gold}`,borderRadius:8,padding:"5px 10px",color:exported?C.green:C.gold,fontSize:11,cursor:"pointer",fontWeight:600}}>
-          {exported?"✅ Sent!":exporting?"Sending…":"📧 Email Report"}
-        </button>
-      </div>
-
-      {/* Equity curve */}
-      <div style={{marginBottom:8,height:140}}>
-        <ExpandableChart title="Equity Curve" inlineHeight={140}>
-          <BacktestChart values={eqVals} dates={dates} color={eqCol} id="bt_eq"
-            yFormat={v=>v.toFixed(0)} yLines={[{value:100,color:C.border,label:"100"}]}/>
-        </ExpandableChart>
-      </div>
-
-      {/* Drawdown */}
-      <div style={{marginBottom:8,height:90}}>
-        <ExpandableChart title="Drawdown" inlineHeight={90}>
-          <BacktestChart values={ddVals} dates={dates} color={C.red} id="bt_dd"
-            yFormat={v=>v.toFixed(1)+"%"} isNegativeArea/>
-        </ExpandableChart>
-      </div>
-
-      {/* Entry signal */}
-      {signalSeries?.length>0 && data.signal_type!=="buy_hold" && (
-        <div style={{marginBottom:8,height:110}}>
-          <ExpandableChart title={`Signal: ${data.signal_type}`} inlineHeight={110}>
-            <BacktestChart values={signalSeries} dates={dates} color={C.blue} id="bt_sig"
-              yFormat={v=>v.toFixed(2)} yLines={sigLines}/>
-          </ExpandableChart>
-        </div>
-      )}
-
-      {/* Exit signal if separate */}
-      {exitSignalSeries?.length>0 && (
-        <div style={{marginBottom:8,height:110}}>
-          <ExpandableChart title={`Exit Signal: ${data.exit_signal_type}`} inlineHeight={110}>
-            <BacktestChart values={exitSignalSeries} dates={dates} color={C.amber} id="bt_exit"
-              yFormat={v=>v.toFixed(2)} yLines={[{value:exitTh,color:C.red,label:`exit ${exitTh}`},{value:0,color:C.border,label:"0"}]}/>
-          </ExpandableChart>
-        </div>
-      )}
-
-      {/* Metrics grid */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:12}}>
-        {metricCards.map(([l,v,c])=>(
-          <div key={l} style={{background:C.surface,borderRadius:7,padding:"5px 7px"}}>
-            <div style={{fontSize:8,color:C.textDim,textTransform:"uppercase",marginBottom:1}}>{l}</div>
-            <div style={{fontSize:12,fontWeight:700,color:c,fontFamily:"monospace"}}>{v??"-"}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Trigger dates — server-computed, authoritative */}
-      {triggerDates.length>0 && (
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.gold,marginBottom:6,textTransform:"uppercase"}}>
-            Entry/Exit Dates — computed by server
-          </div>
-          <div style={{overflowX:"auto",maxHeight:200,overflowY:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr>
-                {["#","Date","Type","Signal"].map(h=><th key={h} style={thStyle}>{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {triggerDates.map((t,i)=>(
-                  <tr key={i}>
-                    <td style={tdStyle(C.textDim)}>{i+1}</td>
-                    <td style={tdStyle()}>{t.date}</td>
-                    <td style={tdStyle(t.type==="ENTRY"?C.green:C.red)}>{t.type}</td>
-                    <td style={tdStyle(t.signal<0?C.red:C.green)}>{t.signal?.toFixed(4)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* All signal breach dates */}
-      {signalBreachDates.length>0 && (
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.blue,marginBottom:6,textTransform:"uppercase"}}>
-            All Signal Breach Dates ({signalBreachDates.length} total)
-          </div>
-          <div style={{overflowX:"auto",maxHeight:200,overflowY:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr>
-                {["#","Date","Signal Value"].map(h=><th key={h} style={thStyle}>{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {signalBreachDates.map((t,i)=>(
-                  <tr key={i}>
-                    <td style={tdStyle(C.textDim)}>{i+1}</td>
-                    <td style={tdStyle()}>{t.date}</td>
-                    <td style={tdStyle(t.signal<0?C.red:C.green)}>{t.signal?.toFixed(4)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Trade list */}
-      {trades.length>0 && (
-        <div>
-          <div style={{fontSize:10,fontWeight:700,color:C.textMuted,marginBottom:6,textTransform:"uppercase"}}>
-            Trades ({trades.length})
-          </div>
-          <div style={{overflowX:"auto",maxHeight:220,overflowY:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr>
-                {["#","Entry","Exit","Days","Return","W/L"].map(h=><th key={h} style={thStyle}>{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {trades.map((t,i)=>(
-                  <tr key={i}>
-                    <td style={tdStyle(C.textDim)}>{i+1}</td>
-                    <td style={tdStyle()}>{t.entryDate}</td>
-                    <td style={tdStyle()}>{t.exitDate}{t.open?" 🟡":""}</td>
-                    <td style={tdStyle()}>{t.durationDays}</td>
-                    <td style={tdStyle(t.returnPct>=0?C.green:C.red)}>{t.returnPct?.toFixed(2)}%</td>
-                    <td style={tdStyle(t.profitable?C.green:C.red)}>{t.profitable?"✅":"❌"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
+// ── Core chart (price line) ──────────────────────────────────────
 
 // ── Mean-Variance Optimisation ────────────────────────────────────
 function MVOPanel({ mvo }) {
@@ -402,7 +154,7 @@ function MVOPanel({ mvo }) {
       {/* Efficient frontier */}
       {view==="frontier" && (
         <ExpandableChart title="Efficient Frontier" inlineHeight={220}>
-          <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"100%",display:"block"}} preserveAspectRatio="xMidYMid meet">
+          <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
             {/* Gridlines */}
             {[0,0.25,0.5,0.75,1].map((t,i)=>{
               const y=PT+t*ph, r=rMax-t*(rMax-rMin);
@@ -449,11 +201,11 @@ function PriceChart({bars,height=160,id="pc"}){
   const ticks=yTicks(min,max);
   const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
   const W=300,H=height,Y=38,P=6;
-  const toY=v=>H-((v-lo)/vr)*(H-P*2)-P;
+  const toY=v=>Math.max(P,Math.min(H-P,H-((v-lo)/vr)*(H-P*2)-P));
   const pts=closes.map((v,i)=>`${Y+(i/(closes.length-1))*W},${toY(v)}`).join(" ");
   return(
-    <ExpandableChart title="Price chart">
-    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:"100%",minHeight:height,display:"block"}} preserveAspectRatio="xMidYMid meet">
+    <ExpandableChart title="Price chart" inlineHeight={160}>
+    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:height,display:"block"}} preserveAspectRatio="xMidYMid meet">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={col} stopOpacity="0.25"/>
@@ -482,11 +234,11 @@ function CandleChart({bars,height=200,id="cc"}){
   const ticks=yTicks(Math.min(...lows),Math.max(...highs));
   const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
   const W=300,H=height,Y=38,P=4;
-  const toY=v=>H-((v-lo)/vr)*(H-P*2)-P;
+  const toY=v=>Math.max(P,Math.min(H-P,H-((v-lo)/vr)*(H-P*2)-P));
   const cw=Math.max(2,(W/recent.length)-1);
   return(
-    <ExpandableChart title="Candlestick chart">
-    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:"100%",minHeight:height,display:"block"}} preserveAspectRatio="xMidYMid meet">
+    <ExpandableChart title="Candlestick chart" inlineHeight={200}>
+    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:height,display:"block"}} preserveAspectRatio="xMidYMid meet">
       {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
       {recent.map((b,i)=>{
@@ -512,20 +264,21 @@ function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
   const col=color||(last>=0?C.green:C.red);
   const ticks=yTicks(Math.min(...vals),Math.max(...vals));
   const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
-  const W=300,H=110,Y=38,P=6;
-  const toY=v=>H-((v-lo)/vr)*(H-P*2)-P;
+  const W=300,H=100,Y=40,P=6;
+  // Clamp toY so values never escape the SVG bounds
+  const toY=v=>Math.max(P,Math.min(H-P,H-((v-lo)/vr)*(H-P*2)-P));
   const nonNull=parsed.map((v,i)=>({v,i})).filter(p=>p.v!==null&&!isNaN(p.v));
   const pts=nonNull.map(({v},ni)=>`${Y+(ni/Math.max(nonNull.length-1,1))*W},${toY(v)}`).join(" ");
   const zeroY=(showZero&&lo<0&&hi>0)?toY(0):null;
   const safeId=id.replace(/[^a-zA-Z0-9_-]/g,"_");
   return(
-    <ExpandableChart title={label}>
-    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px 8px"}}> 
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+    <ExpandableChart title={label} inlineHeight={130}>
+    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px 6px",overflow:"hidden"}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
         <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
         <Mono style={{fontSize:13,fontWeight:700,color:col}}>{last.toFixed(3)}</Mono>
       </div>
-      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
+      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:90,display:"block"}} preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id={safeId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={col} stopOpacity="0.2"/>
@@ -533,7 +286,7 @@ function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
           </linearGradient>
           <clipPath id={`cp_${safeId}`}><rect x={Y} y={0} width={W} height={H}/></clipPath>
         </defs>
-        {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
+        {ticks.map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
         {zeroY!==null&&<line x1={Y} y1={zeroY} x2={Y+W} y2={zeroY} stroke={C.textDim} strokeWidth="1.5"/>}
         <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
         <g clipPath={`url(#cp_${safeId})`}>
@@ -541,7 +294,7 @@ function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
           {pts&&<polyline points={pts} fill="none" stroke={col} strokeWidth="1.8"/>}
         </g>
       </svg>
-      {dates&&<div style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span style={{fontSize:9,color:C.textDim}}>{dates[0]}</span><span style={{fontSize:9,color:C.textDim}}>{dates[dates.length-1]}</span></div>}
+      {dates&&<div style={{display:"flex",justifyContent:"space-between",marginTop:2}}><span style={{fontSize:9,color:C.textDim}}>{dates[0]}</span><span style={{fontSize:9,color:C.textDim}}>{dates[dates.length-1]}</span></div>}
     </div>
     </ExpandableChart>
   );
@@ -553,13 +306,13 @@ function DistributionPanel({label,distribution,id="dist"}){
   const W=300,H=110,Y=38,P=8;
   const bw=W/distribution.length;
   return(
-    <ExpandableChart title={label}>
+    <ExpandableChart title={label} inlineHeight={130}>
     <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px 8px"}}> 
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
         <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
         <Mono style={{fontSize:13,fontWeight:700,color:C.goldText}}>{distribution.reduce((s,b)=>s+(b.count||0),0)} obs</Mono>
       </div>
-      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="xMidYMid meet">
+      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
         {[0,0.5,1].map((p,i)=>{const y=H-P-p*(H-P*2);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.45"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{Math.round(max*p)}</text></g>);})}
         <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
         {distribution.map((b,i)=>{
@@ -823,11 +576,7 @@ export default function App(){
     try{
       const r=await fetch(`${BACKEND}/api/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text,history})});
       const d=await r.json();
-      setMessages(prev=>[...prev.slice(0,-1),{
-        role:"assistant",
-        content:d.reply||d.error||"No response",
-        backtestData:d.backtestData||null,
-      }]);
+      setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:d.reply||d.error||"No response"}]);
     }catch(e){setMessages(prev=>[...prev.slice(0,-1),{role:"assistant",content:`Error: ${e.message}`}]);}
     setLoading(false);
   }
@@ -909,7 +658,7 @@ export default function App(){
               <div key={i} style={{marginBottom:14,display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8,alignItems:"flex-end"}}>
                 {m.role==="assistant"&&<div style={{width:26,height:26,borderRadius:"50%",background:C.goldDim,border:`1px solid ${C.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>🤖</div>}
                 <div style={{maxWidth:"82%",padding:"10px 14px",borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",background:m.role==="user"?"#1E3A5F":C.surfaceHigh,border:m.role==="user"?"none":`1px solid ${C.border}`,color:C.textPrimary,fontSize:14,lineHeight:1.6,overflow:"hidden",minWidth:0}}>
-                  {m.loading?<span style={{opacity:0.4}}>Thinking…</span>:<><MessageContent content={m.content}/>{m.backtestData&&<BacktestResult data={m.backtestData}/>}</>}
+                  {m.loading?<span style={{opacity:0.4}}>Thinking…</span>:<MessageContent content={m.content}/>}
                 </div>
               </div>
             ))}
@@ -1274,7 +1023,7 @@ export default function App(){
                   <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)}</Mono> · MOVE: <Mono style={{color:C.textPrimary}}>{regimeData.currentMove?.toFixed(1)}</Mono> · iTraxx vol: <Mono style={{color:C.textPrimary}}>{regimeData.currentDxstVol?.toFixed(1)}%</Mono> · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
                   <div style={{fontSize:11,color:C.textDim,marginTop:3}}>Normal: {normalDays}d · Stress: {stressDays}d (last 1Y)</div>
                 </div>
-                <svg viewBox="0 0 70 70" style={{width:70,height:70,flexShrink:0}}>
+                <svg viewBox="0 0 70 70" style={{width:70,height:70,flexShrink:0,display:"block"}}>
                   <circle cx="35" cy="35" r="28" fill="none" stroke={C.border} strokeWidth="7"/>
                   <circle cx="35" cy="35" r="28" fill="none" stroke={isStress?C.red:C.green} strokeWidth="7"
                     strokeDasharray={`${(currentStressProb||0)*175.9} 175.9`} strokeLinecap="round" transform="rotate(-90 35 35)"/>
@@ -1300,7 +1049,8 @@ export default function App(){
                       <div style={{fontSize:13,fontWeight:700}}>Portfolio Value — Last 1Y</div>
                       <div style={{fontSize:10,color:C.textMuted,marginTop:2}}><span style={{color:C.green}}>▬</span> Normal &nbsp;<span style={{color:C.red}}>▬</span> Stress</div>
                     </div>
-                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="xMidYMid meet">
+                    <ExpandableChart title="Portfolio Index">
+                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
                       <defs>
                         <linearGradient id="rgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.gold} stopOpacity="0.2"/><stop offset="100%" stopColor={C.gold} stopOpacity="0"/></linearGradient>
                         <clipPath id="rgClip"><rect x={Y} y={0} width={W} height={H}/></clipPath>
@@ -1322,6 +1072,7 @@ export default function App(){
                         return(<g key={p.date}><line x1={x} y1={H-2} x2={x} y2={H+2} stroke={C.border} strokeWidth="1"/><text x={x} y={H+10} textAnchor="middle" style={{fontSize:7,fill:C.textMuted,fontFamily:C.mono}}>{p.date.slice(0,7)}</text></g>);
                       })}
                     </svg>
+                    </ExpandableChart>
                     <div style={{height:14}}/>
                   </Card>
                 );
@@ -1340,7 +1091,8 @@ export default function App(){
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
                     <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(stress) — Last 1Y</div>
-                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="xMidYMid meet">
+                    <ExpandableChart title="Stress Probability">
+                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
                       <defs><clipPath id="spClip"><rect x={Y} y={0} width={W} height={H}/></clipPath></defs>
                       {[0,0.25,0.5,0.75,1.0].map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={t===0.5?C.textMuted:C.border} strokeWidth={t===0.5?"1.5":"1"} strokeDasharray={t===0.5?"5,3":"3,4"} opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{t.toFixed(2)}</text></g>);})}
                       <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
@@ -1358,6 +1110,7 @@ export default function App(){
                         return(<g key={p.date}><line x1={x} y1={H-2} x2={x} y2={H+2} stroke={C.border} strokeWidth="1"/><text x={x} y={H+10} textAnchor="middle" style={{fontSize:7,fill:C.textMuted,fontFamily:C.mono}}>{p.date.slice(0,7)}</text></g>);
                       })}
                     </svg>
+                    </ExpandableChart>
                     <div style={{height:14}}/>
                   </Card>
                 );
@@ -1409,7 +1162,7 @@ export default function App(){
                           </div>
                         ))}
                       </div>
-                      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H}} preserveAspectRatio="xMidYMid meet">
+                      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
                         {[0,0.5,1].map((p,i)=>{const y=H-P-p*(H-P*2);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,3" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{Math.round(maxC*p)}</text></g>);})}
                         <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
                         {dist.map((b,i)=>{const h=((b.count||0)/maxC)*(H-P*2);return<rect key={i} x={Y+i*bw+0.5} y={H-P-h} width={Math.max(1,bw-1)} height={h} fill={col} opacity="0.85" rx="1"/>;
