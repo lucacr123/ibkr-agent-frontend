@@ -191,140 +191,238 @@ function MVOPanel({ mvo }) {
   );
 }
 
-function PriceChart({bars,height=160,id="pc"}){
-  if(!bars?.length)return null;
-  const closes=bars.map(b=>parseFloat(b.close)).filter(v=>!isNaN(v));
-  if(!closes.length)return null;
-  const first=closes[0],last=closes[closes.length-1];
-  const col=last>=first?C.green:C.red;
-  const min=Math.min(...closes),max=Math.max(...closes);
-  const ticks=yTicks(min,max);
-  const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
-  const W=300,H=height,Y=38,P=6;
-  const toY=v=>Math.max(P,Math.min(H-P,H-((v-lo)/vr)*(H-P*2)-P));
-  const pts=closes.map((v,i)=>`${Y+(i/(closes.length-1))*W},${toY(v)}`).join(" ");
-  return(
-    <ExpandableChart title="Price chart" inlineHeight={160}>
-    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:height,display:"block"}} preserveAspectRatio="xMidYMid meet">
+// ═══════════════════════════════════════════════════════════════════
+// CHART PRIMITIVES — single source of truth for all charts in the app
+// Auto-scaling Y axis, proper X date axis, no clamping
+// ═══════════════════════════════════════════════════════════════════
+
+function niceTicks(min, max, n=5) {
+  const range = max - min || 1;
+  const rough = range / n;
+  const mag   = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm  = rough / mag;
+  const step  = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10;
+  const s     = Math.floor(min / (step*mag)) * (step*mag);
+  const ticks = [];
+  for (let v = s; v <= max + step*mag*0.01; v += step*mag)
+    ticks.push(+v.toFixed(10));
+  return ticks;
+}
+
+function xDateTicks(dates, n=6) {
+  if (!dates?.length) return [];
+  const out  = [];
+  const step = Math.max(1, Math.floor(dates.length / n));
+  for (let i = 0; i < dates.length; i += step)
+    out.push({ i, label: (dates[i]||"").slice(0,7) });
+  const last = dates.length - 1;
+  if (!out.find(t => t.i === last))
+    out.push({ i: last, label: (dates[last]||"").slice(0,7) });
+  return out;
+}
+
+// Core line chart — used everywhere
+function LineChart({ values, dates, color, id="lc", showZero=false, yFmt, height=160 }) {
+  if (!values?.length) return null;
+  const vals = values.filter(v => v !== null && !isNaN(v));
+  if (!vals.length) return null;
+
+  const vMin0 = Math.min(...vals), vMax0 = Math.max(...vals);
+  const pad   = (vMax0 - vMin0) * 0.06 || 1;
+  const ticks = niceTicks(vMin0 - pad, vMax0 + pad);
+  const vMin  = ticks[0], vMax = ticks[ticks.length-1], vRange = vMax - vMin || 1;
+
+  const W = 320, H = height, PL = 46, PR = 8, PT = 8, PB = 28;
+  const plotW = W-PL-PR, plotH = H-PT-PB;
+  const toX = i => PL + (i / Math.max(values.length-1,1)) * plotW;
+  const toY = v => PT + (1 - (v-vMin)/vRange) * plotH;
+
+  const clipId = `cl_${id}`, gradId = `gr_${id}`;
+  const fmt    = yFmt || (v => Math.abs(v)>=1000 ? `${(v/1000).toFixed(1)}k` : v.toFixed(2));
+  const zeroY  = (showZero && vMin < 0 && vMax > 0) ? toY(0) : null;
+
+  // Build line segments (skip nulls)
+  const segments = [];
+  let seg = [];
+  values.forEach((v,i) => {
+    if (v===null||isNaN(v)) { if (seg.length){segments.push(seg);seg=[];} }
+    else seg.push(`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
+  });
+  if (seg.length) segments.push(seg);
+
+  const xTicks = xDateTicks(dates);
+  const col    = color || C.blue;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height,display:"block"}} preserveAspectRatio="xMidYMid meet">
       <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={col} stopOpacity="0.25"/>
+        <clipPath id={clipId}><rect x={PL} y={PT} width={plotW} height={plotH}/></clipPath>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={col} stopOpacity="0.22"/>
           <stop offset="100%" stopColor={col} stopOpacity="0"/>
         </linearGradient>
-        <clipPath id={`cp_${id}`}><rect x={Y} y={0} width={W} height={H}/></clipPath>
       </defs>
-      {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
-      <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-      <g clipPath={`url(#cp_${id})`}>
-        <polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill={`url(#${id})`}/>
-        <polyline points={pts} fill="none" stroke={col} strokeWidth="1.8"/>
+
+      {/* Y gridlines + labels */}
+      {ticks.map((t,i) => {
+        const y = toY(t);
+        if (y < PT-4 || y > PT+plotH+4) return null;
+        return <g key={i}>
+          <line x1={PL} y1={y} x2={PL+plotW} y2={y} stroke={C.border} strokeWidth="0.5" strokeDasharray={t===0?"":"2,4"} opacity="0.6"/>
+          <text x={PL-4} y={y+3.5} textAnchor="end" fontSize="9" fill={C.textMuted} fontFamily={C.mono}>{fmt(t)}</text>
+        </g>;
+      })}
+
+      {zeroY!==null && <line x1={PL} y1={zeroY} x2={PL+plotW} y2={zeroY} stroke={C.textDim} strokeWidth="1.2"/>}
+      <line x1={PL} y1={PT} x2={PL} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
+      <line x1={PL} y1={PT+plotH} x2={PL+plotW} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
+
+      {/* Line + fill, clipped */}
+      <g clipPath={`url(#${clipId})`}>
+        {segments.map((s,i) => {
+          const x0=s[0].split(",")[0], xN=s[s.length-1].split(",")[0];
+          return <g key={i}>
+            <polygon points={`${x0},${PT+plotH} ${s.join(" ")} ${xN},${PT+plotH}`} fill={`url(#${gradId})`}/>
+            <polyline points={s.join(" ")} fill="none" stroke={col} strokeWidth="1.8"/>
+          </g>;
+        })}
       </g>
+
+      {/* X date axis */}
+      {xTicks.map((t,i) => (
+        <g key={i}>
+          <line x1={toX(t.i)} y1={PT+plotH} x2={toX(t.i)} y2={PT+plotH+3} stroke={C.border} strokeWidth="1"/>
+          <text x={toX(t.i)} y={H-4} textAnchor="middle" fontSize="9" fill={C.textMuted} fontFamily={C.mono}>{t.label}</text>
+        </g>
+      ))}
     </svg>
+  );
+}
+
+// ── Price chart ───────────────────────────────────────────────────
+function PriceChart({bars, height=160, id="pc"}) {
+  if (!bars?.length) return null;
+  const closes = bars.map(b => parseFloat(b.close));
+  const dates  = bars.map(b => b.date);
+  const col    = closes[closes.length-1] >= closes[0] ? C.green : C.red;
+  return (
+    <ExpandableChart title="Price chart" inlineHeight={height}>
+      <LineChart values={closes} dates={dates} color={col} id={id} height={height} yFmt={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(2)}/>
     </ExpandableChart>
   );
 }
 
 // ── Candlestick chart ─────────────────────────────────────────────
-function CandleChart({bars,height=200,id="cc"}){
-  if(!bars?.length)return null;
-  const recent=bars.slice(-80);
-  const highs=recent.map(b=>parseFloat(b.high)).filter(v=>!isNaN(v));
-  const lows=recent.map(b=>parseFloat(b.low)).filter(v=>!isNaN(v));
-  if(!highs.length)return null;
-  const ticks=yTicks(Math.min(...lows),Math.max(...highs));
-  const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
-  const W=300,H=height,Y=38,P=4;
-  const toY=v=>Math.max(P,Math.min(H-P,H-((v-lo)/vr)*(H-P*2)-P));
-  const cw=Math.max(2,(W/recent.length)-1);
-  return(
-    <ExpandableChart title="Candlestick chart" inlineHeight={200}>
-    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:height,display:"block"}} preserveAspectRatio="xMidYMid meet">
-      {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
-      <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-      {recent.map((b,i)=>{
-        const o=parseFloat(b.open),c=parseFloat(b.close),h=parseFloat(b.high),l=parseFloat(b.low);
-        if(isNaN(o)||isNaN(c))return null;
-        const bull=c>=o,col=bull?C.green:C.red;
-        const x=Y+(i/recent.length)*W;
-        const bodyT=Math.min(toY(o),toY(c)),bodyH=Math.max(Math.abs(toY(c)-toY(o)),1);
-        return(<g key={i}><line x1={x+cw/2} y1={toY(h)} x2={x+cw/2} y2={toY(l)} stroke={col} strokeWidth="1"/><rect x={x} y={bodyT} width={cw} height={bodyH} fill={col} opacity="0.9"/></g>);
-      })}
-    </svg>
-    </ExpandableChart>
-  );
-}
+function CandleChart({bars, height=200, id="cc"}) {
+  if (!bars?.length) return null;
+  const recent = bars.slice(-80);
+  const highs  = recent.map(b => parseFloat(b.high)).filter(v=>!isNaN(v));
+  const lows   = recent.map(b => parseFloat(b.low)).filter(v=>!isNaN(v));
+  if (!highs.length) return null;
 
-// ── Quant series chart ────────────────────────────────────────────
-function QuantPanel({label,series,dates,color,showZero=false,id="qp"}){
-  if(!series?.length)return null;
-  const parsed=series.map(v=>(v===null||v===undefined)?null:parseFloat(v));
-  const vals=parsed.filter(v=>v!==null&&!isNaN(v));
-  if(!vals.length)return null;
-  const last=vals[vals.length-1];
-  const col=color||(last>=0?C.green:C.red);
-  const ticks=yTicks(Math.min(...vals),Math.max(...vals));
-  const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
-  const W=300,H=100,Y=40,P=6;
-  // Clamp toY so values never escape the SVG bounds
-  const toY=v=>Math.max(P,Math.min(H-P,H-((v-lo)/vr)*(H-P*2)-P));
-  const nonNull=parsed.map((v,i)=>({v,i})).filter(p=>p.v!==null&&!isNaN(p.v));
-  const pts=nonNull.map(({v},ni)=>`${Y+(ni/Math.max(nonNull.length-1,1))*W},${toY(v)}`).join(" ");
-  const zeroY=(showZero&&lo<0&&hi>0)?toY(0):null;
-  const safeId=id.replace(/[^a-zA-Z0-9_-]/g,"_");
-  return(
-    <ExpandableChart title={label} inlineHeight={130}>
-    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px 6px",overflow:"hidden"}}>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-        <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
-        <Mono style={{fontSize:13,fontWeight:700,color:col}}>{last.toFixed(3)}</Mono>
-      </div>
-      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:90,display:"block"}} preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <linearGradient id={safeId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={col} stopOpacity="0.2"/>
-            <stop offset="100%" stopColor={col} stopOpacity="0"/>
-          </linearGradient>
-          <clipPath id={`cp_${safeId}`}><rect x={Y} y={0} width={W} height={H}/></clipPath>
-        </defs>
-        {ticks.map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
-        {zeroY!==null&&<line x1={Y} y1={zeroY} x2={Y+W} y2={zeroY} stroke={C.textDim} strokeWidth="1.5"/>}
-        <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-        <g clipPath={`url(#cp_${safeId})`}>
-          {pts&&<polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill={`url(#${safeId})`}/>}
-          {pts&&<polyline points={pts} fill="none" stroke={col} strokeWidth="1.8"/>}
+  const pad    = (Math.max(...highs) - Math.min(...lows)) * 0.04;
+  const ticks  = niceTicks(Math.min(...lows)-pad, Math.max(...highs)+pad);
+  const vMin   = ticks[0], vMax = ticks[ticks.length-1], vRange = vMax-vMin||1;
+  const W=320,H=height,PL=46,PR=8,PT=8,PB=28;
+  const plotW=W-PL-PR, plotH=H-PT-PB;
+  const toY = v => PT + (1-(v-vMin)/vRange)*plotH;
+  const toX = i => PL + (i/Math.max(recent.length-1,1))*plotW;
+  const cw  = Math.max(2, plotW/recent.length - 1);
+  const xTicks = xDateTicks(recent.map(b=>b.date));
+
+  return (
+    <ExpandableChart title="Candlestick chart" inlineHeight={height}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height,display:"block"}} preserveAspectRatio="xMidYMid meet">
+        <defs><clipPath id={`cc_${id}`}><rect x={PL} y={PT} width={plotW} height={plotH}/></clipPath></defs>
+        {ticks.map((t,i)=>{const y=toY(t);return(
+          <g key={i}>
+            <line x1={PL} y1={y} x2={PL+plotW} y2={y} stroke={C.border} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.6"/>
+            <text x={PL-4} y={y+3.5} textAnchor="end" fontSize="9" fill={C.textMuted} fontFamily={C.mono}>{t>=1000?`${(t/1000).toFixed(1)}k`:t.toFixed(0)}</text>
+          </g>
+        );})}
+        <line x1={PL} y1={PT} x2={PL} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
+        <line x1={PL} y1={PT+plotH} x2={PL+plotW} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
+        <g clipPath={`url(#cc_${id})`}>
+          {recent.map((b,i)=>{
+            const o=parseFloat(b.open),c=parseFloat(b.close),h=parseFloat(b.high),l=parseFloat(b.low);
+            if(isNaN(o)||isNaN(c))return null;
+            const col=c>=o?C.green:C.red, cx=toX(i)+cw/2;
+            return <g key={i}>
+              <line x1={cx} y1={toY(h)} x2={cx} y2={toY(l)} stroke={col} strokeWidth="1"/>
+              <rect x={toX(i)} y={Math.min(toY(o),toY(c))} width={cw} height={Math.max(1,Math.abs(toY(c)-toY(o)))} fill={col} opacity="0.9"/>
+            </g>;
+          })}
         </g>
+        {xTicks.map((t,i)=>(
+          <g key={i}>
+            <line x1={toX(t.i)} y1={PT+plotH} x2={toX(t.i)} y2={PT+plotH+3} stroke={C.border} strokeWidth="1"/>
+            <text x={toX(t.i)} y={H-4} textAnchor="middle" fontSize="9" fill={C.textMuted} fontFamily={C.mono}>{t.label}</text>
+          </g>
+        ))}
       </svg>
-      {dates&&<div style={{display:"flex",justifyContent:"space-between",marginTop:2}}><span style={{fontSize:9,color:C.textDim}}>{dates[0]}</span><span style={{fontSize:9,color:C.textDim}}>{dates[dates.length-1]}</span></div>}
-    </div>
     </ExpandableChart>
   );
 }
 
-function DistributionPanel({label,distribution,id="dist"}){
-  if(!distribution?.length)return null;
-  const max=Math.max(...distribution.map(b=>b.count||0),1);
-  const W=300,H=110,Y=38,P=8;
-  const bw=W/distribution.length;
-  return(
+// ── Quant series panel ────────────────────────────────────────────
+function QuantPanel({label, series, dates, color, showZero=false, id="qp"}) {
+  if (!series?.length) return null;
+  const vals = series.filter(v => v!==null&&!isNaN(v));
+  if (!vals.length) return null;
+  const last = vals[vals.length-1];
+  const col  = color || (last>=0 ? C.green : C.red);
+  return (
     <ExpandableChart title={label} inlineHeight={130}>
-    <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px 8px"}}> 
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-        <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
-        <Mono style={{fontSize:13,fontWeight:700,color:C.goldText}}>{distribution.reduce((s,b)=>s+(b.count||0),0)} obs</Mono>
+      <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px 4px",overflow:"hidden"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
+          <Mono style={{fontSize:13,fontWeight:700,color:col}}>{last.toFixed(3)}</Mono>
+        </div>
+        <LineChart values={series} dates={dates} color={col} id={id} height={90} showZero={showZero} yFmt={v=>v.toFixed(2)}/>
       </div>
-      <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
-        {[0,0.5,1].map((p,i)=>{const y=H-P-p*(H-P*2);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.45"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{Math.round(max*p)}</text></g>);})}
-        <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-        {distribution.map((b,i)=>{
-          const h=((b.count||0)/max)*(H-P*2);
-          return <rect key={i} x={Y+i*bw+1} y={H-P-h} width={Math.max(1,bw-2)} height={h} fill={C.gold} opacity="0.85" rx="1"/>;
-        })}
-      </svg>
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span style={{fontSize:9,color:C.textDim}}>{distribution[0]?.binStart}%</span><span style={{fontSize:9,color:C.textDim}}>Daily return buckets</span><span style={{fontSize:9,color:C.textDim}}>{distribution[distribution.length-1]?.binEnd}%</span></div>
-    </div>
     </ExpandableChart>
   );
 }
+
+// ── Return distribution histogram ─────────────────────────────────
+function DistributionPanel({label, distribution, id="dist"}) {
+  if (!distribution?.length) return null;
+  const max = Math.max(...distribution.map(b=>b.count||0),1);
+  const W=320,H=120,PL=36,PR=8,PT=8,PB=28;
+  const plotW=W-PL-PR, plotH=H-PT-PB;
+  const bw = plotW/distribution.length;
+  return (
+    <ExpandableChart title={label} inlineHeight={140}>
+      <div style={{marginTop:10,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 12px 4px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{fontSize:11,color:C.textMuted,fontWeight:600}}>{label}</span>
+          <Mono style={{fontSize:13,fontWeight:700,color:C.goldText}}>{distribution.reduce((s,b)=>s+(b.count||0),0)} obs</Mono>
+        </div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
+          {[0,0.25,0.5,0.75,1].map((p,i)=>{const y=PT+plotH-p*plotH; return(
+            <g key={i}>
+              <line x1={PL} y1={y} x2={PL+plotW} y2={y} stroke={C.border} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.5"/>
+              <text x={PL-3} y={y+3} textAnchor="end" fontSize="8" fill={C.textMuted} fontFamily={C.mono}>{Math.round(max*p)}</text>
+            </g>
+          );})}
+          <line x1={PL} y1={PT} x2={PL} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
+          <line x1={PL} y1={PT+plotH} x2={PL+plotW} y2={PT+plotH} stroke={C.border} strokeWidth="1"/>
+          {distribution.map((b,i)=>{
+            const h=((b.count||0)/max)*plotH;
+            return <rect key={i} x={PL+i*bw+1} y={PT+plotH-h} width={Math.max(1,bw-2)} height={h} fill={C.gold} opacity="0.85" rx="1"/>;
+          })}
+          {[0,Math.floor(distribution.length/2),distribution.length-1].map(i=>(
+            <text key={i} x={PL+i*bw+bw/2} y={H-4} textAnchor="middle" fontSize="8" fill={C.textMuted} fontFamily={C.mono}>
+              {distribution[i]?.binStart?.toFixed(1)}%
+            </text>
+          ))}
+        </svg>
+      </div>
+    </ExpandableChart>
+  );
+}
+
+
 
 // ── Inline quant chart from @@QUANT tags ──────────────────────────
 function InlineQuant({symbol,metric,range="1y",label}){
@@ -1034,84 +1132,36 @@ export default function App(){
               {/* Panel 1: Portfolio 1Y with regime shading */}
               {portfolioIndex?.length>0&&(()=>{
                 const vals=portfolioIndex.map(p=>p.value);
-                const ticks=yTicks(Math.min(...vals),Math.max(...vals));
-                const lo=ticks[0],hi=ticks[ticks.length-1],vr=hi-lo||1;
-                const W=300,H=160,Y=38,P=6;
-                const toY=v=>H-((v-lo)/vr)*(H-P*2)-P;
-                const toX=i=>Y+(i/Math.max(portfolioIndex.length-1,1))*W;
-                const segs=[];let ss=null;
-                portfolioIndex.forEach((p,i)=>{if(p.regime===1&&ss===null)ss=i;if(p.regime!==1&&ss!==null){segs.push([ss,i-1]);ss=null;}});
-                if(ss!==null)segs.push([ss,portfolioIndex.length-1]);
-                const pts=portfolioIndex.map((p,i)=>`${toX(i).toFixed(1)},${toY(p.value).toFixed(1)}`).join(" ");
+                const dates=portfolioIndex.map(p=>p.date);
+                const regimes=portfolioIndex.map(p=>p.regime);
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
                     <div style={{marginBottom:8}}>
                       <div style={{fontSize:13,fontWeight:700}}>Portfolio Value — Last 1Y</div>
                       <div style={{fontSize:10,color:C.textMuted,marginTop:2}}><span style={{color:C.green}}>▬</span> Normal &nbsp;<span style={{color:C.red}}>▬</span> Stress</div>
                     </div>
-                    <ExpandableChart title="Portfolio Index">
-                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
-                      <defs>
-                        <linearGradient id="rgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.gold} stopOpacity="0.2"/><stop offset="100%" stopColor={C.gold} stopOpacity="0"/></linearGradient>
-                        <clipPath id="rgClip"><rect x={Y} y={0} width={W} height={H}/></clipPath>
-                      </defs>
-                      {segs.map(([s,e],i)=><rect key={i} x={toX(s)} y={P} width={Math.max(1,toX(e)-toX(s))} height={H-P*2} fill={C.red} opacity="0.18"/>)}
-                      {ticks.map((t,i)=>{const y=toY(t);if(y<0||y>H)return null;return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={C.border} strokeWidth="1" strokeDasharray="3,4" opacity="0.5"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{fmtTick(t)}</text></g>);})}
-                      <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-                      <polygon points={`${Y},${H} ${pts} ${Y+W},${H}`} fill="url(#rgGrad)" clipPath="url(#rgClip)"/>
-                      <polyline points={pts} fill="none" stroke={C.gold} strokeWidth="1.8" clipPath="url(#rgClip)"/>
-                      {/* X-axis: quarterly labels */}
-                      {portfolioIndex.filter((_,i)=>{
-                        if(i===0||i===portfolioIndex.length-1)return true;
-                        const d=new Date(portfolioIndex[i].date);
-                        const prev=new Date(portfolioIndex[i-1].date);
-                        return d.getMonth()!==prev.getMonth()&&d.getMonth()%3===0;
-                      }).map((p,_,arr)=>{
-                        const i=portfolioIndex.indexOf(p);
-                        const x=toX(i);
-                        return(<g key={p.date}><line x1={x} y1={H-2} x2={x} y2={H+2} stroke={C.border} strokeWidth="1"/><text x={x} y={H+10} textAnchor="middle" style={{fontSize:7,fill:C.textMuted,fontFamily:C.mono}}>{p.date.slice(0,7)}</text></g>);
-                      })}
-                    </svg>
+                    <ExpandableChart title="Portfolio Index" inlineHeight={160}>
+                      <LineChart values={vals} dates={dates} color={C.gold} id="port_idx" height={160} yFmt={v=>v.toFixed(1)}/>
                     </ExpandableChart>
-                    <div style={{height:14}}/>
+                    <div style={{height:8}}/>
                   </Card>
                 );
               })()}
 
               {/* Panel 2: Stress probability 5Y */}
               {stressProbFull?.length>0&&(()=>{
-                const W=300,H=100,Y=38,P=6;
-                const toY=v=>H-v*(H-P*2)-P;
-                const toX=i=>Y+(i/Math.max(stressProbFull.length-1,1))*W;
-                const pts=stressProbFull.map((s,i)=>`${toX(i).toFixed(1)},${toY(s.prob).toFixed(1)}`).join(" ");
-                const zeroY=toY(0.5);
-                const aboveSegs=[];let as_=null;
-                stressProbFull.forEach((s,i)=>{if(s.prob>0.5&&as_===null)as_=i;if(s.prob<=0.5&&as_!==null){aboveSegs.push([as_,i-1]);as_=null;}});
-                if(as_!==null)aboveSegs.push([as_,stressProbFull.length-1]);
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
                     <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Stress Probability P(stress) — Last 1Y</div>
-                    <ExpandableChart title="Stress Probability">
-                    <svg viewBox={`0 0 ${W+Y} ${H}`} style={{width:"100%",height:H,display:"block"}} preserveAspectRatio="xMidYMid meet">
-                      <defs><clipPath id="spClip"><rect x={Y} y={0} width={W} height={H}/></clipPath></defs>
-                      {[0,0.25,0.5,0.75,1.0].map((t,i)=>{const y=toY(t);return(<g key={i}><line x1={Y} y1={y} x2={Y+W} y2={y} stroke={t===0.5?C.textMuted:C.border} strokeWidth={t===0.5?"1.5":"1"} strokeDasharray={t===0.5?"5,3":"3,4"} opacity="0.6"/><text x={Y-3} y={y+3.5} textAnchor="end" style={{fontSize:8,fill:C.textMuted,fontFamily:C.mono}}>{t.toFixed(2)}</text></g>);})}
-                      <line x1={Y} y1={0} x2={Y} y2={H} stroke={C.border} strokeWidth="1"/>
-                      {aboveSegs.map(([s,e],i)=>{const segPts=stressProbFull.slice(s,e+1).map((sp,j)=>`${toX(s+j).toFixed(1)},${toY(sp.prob).toFixed(1)}`).join(" ");return<polygon key={i} points={`${toX(s)},${zeroY} ${segPts} ${toX(e)},${zeroY}`} fill={C.red} opacity="0.3" clipPath="url(#spClip)"/>;})}
-                      <polyline points={pts} fill="none" stroke={C.red} strokeWidth="1.5" clipPath="url(#spClip)"/>
-                      {/* X-axis: quarterly labels */}
-                      {stressProbFull.filter((_,i)=>{
-                        if(i===0||i===stressProbFull.length-1)return true;
-                        const d=new Date(stressProbFull[i].date);
-                        const prev=new Date(stressProbFull[i-1].date);
-                        return d.getMonth()!==prev.getMonth()&&d.getMonth()%3===0;
-                      }).map((p,_)=>{
-                        const i=stressProbFull.indexOf(p);
-                        const x=toX(i);
-                        return(<g key={p.date}><line x1={x} y1={H-2} x2={x} y2={H+2} stroke={C.border} strokeWidth="1"/><text x={x} y={H+10} textAnchor="middle" style={{fontSize:7,fill:C.textMuted,fontFamily:C.mono}}>{p.date.slice(0,7)}</text></g>);
-                      })}
-                    </svg>
+                    <ExpandableChart title="Stress Probability" inlineHeight={110}>
+                      <LineChart
+                        values={stressProbFull.map(s=>s.prob)}
+                        dates={stressProbFull.map(s=>s.date)}
+                        color={C.red} id="stress_prob" height={110}
+                        showZero={false} yFmt={v=>v.toFixed(2)}
+                      />
                     </ExpandableChart>
-                    <div style={{height:14}}/>
+                    <div style={{height:8}}/>
                   </Card>
                 );
               })()}
