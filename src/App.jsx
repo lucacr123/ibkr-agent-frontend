@@ -8,7 +8,7 @@ const C = {
   mono:"'JetBrains Mono','Fira Mono',monospace",
 };
 const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
-const YF = { CSPX:"CSPX.L",CSNDX:"CNDX.L",CSSX5E:"CSSX5E.SW",IEEM:"IEEM.L",IUSE:"IUSE.L",NQSE:"NQSE.DE",SPCX:"SPCX.L",VUAG:"VUAG.L",VWRL:"VWRL.L",VFEM:"VFEM.L" };
+const YF_DEFAULT = { CSPX:"CSPX.L",CSNDX:"CNDX.L",CSSX5E:"CSSX5E.SW",IEEM:"IEEM.L",IUSE:"IUSE.L",NQSE:"NQSE.DE",SPCX:"SPCX.L",VUAG:"VUAG.L",VWRL:"VWRL.L",VFEM:"VFEM.L" };
 
 function b64ToUint8(b){const pad="=".repeat((4-b.length%4)%4);const raw=atob((b+pad).replace(/-/g,"+").replace(/_/g,"/"));return new Uint8Array([...raw].map(c=>c.charCodeAt(0)));}
 const Mono=({children,style={}})=><span style={{fontFamily:C.mono,...style}}>{children}</span>;
@@ -825,6 +825,10 @@ export default function App(){
   }
 
   const combined=portfolio?.combined;
+  // Build symbol map dynamically from live positions — fallback to defaults
+  const YF = combined?.positions
+    ? Object.fromEntries(combined.positions.map(p=>[p.symbol, p.yahooSymbol||YF_DEFAULT[p.symbol]||p.symbol]))
+    : YF_DEFAULT;
   const acct1=portfolio?.accounts?.find(a=>a.accountId==="U11354150");
   const acct2=portfolio?.accounts?.find(a=>a.accountId==="U9733561");
   const fmtEUR=v=>`€${parseFloat(v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
