@@ -1141,14 +1141,36 @@ export default function App(){
                 const vals=portfolioIndex.map(p=>p.value);
                 const dates=portfolioIndex.map(p=>p.date);
                 const regimes=portfolioIndex.map(p=>p.regime);
+                const H=160;
+                // Build stress segments for shading overlay
+                const stressSegs=[];let ss=null;
+                regimes.forEach((r,i)=>{
+                  if(r===1&&ss===null)ss=i;
+                  if(r!==1&&ss!==null){stressSegs.push([ss,i-1]);ss=null;}
+                });
+                if(ss!==null)stressSegs.push([ss,regimes.length-1]);
+                const n=vals.length;
                 return(
                   <Card style={{padding:"12px 14px 8px"}}>
                     <div style={{marginBottom:8}}>
                       <div style={{fontSize:13,fontWeight:700}}>Portfolio Value — Last 1Y</div>
                       <div style={{fontSize:10,color:C.textMuted,marginTop:2}}><span style={{color:C.green}}>▬</span> Normal &nbsp;<span style={{color:C.red}}>▬</span> Stress</div>
                     </div>
-                    <ExpandableChart title="Portfolio Index" inlineHeight={160}>
-                      <LineChart values={vals} dates={dates} color={C.gold} id="port_idx" height={160} yFmt={v=>v.toFixed(1)}/>
+                    <ExpandableChart title="Portfolio Index" inlineHeight={H}>
+                      <div style={{position:"relative",height:H}}>
+                        <LineChart values={vals} dates={dates} color={C.gold} id="port_idx" height={H} yFmt={v=>v.toFixed(1)}/>
+                        {/* Regime shading overlay — red for stress periods */}
+                        <svg viewBox={`0 0 320 ${H}`} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}} preserveAspectRatio="xMidYMid meet">
+                          {stressSegs.map(([s,e],i)=>(
+                            <rect key={i}
+                              x={46+(s/Math.max(n-1,1))*266}
+                              y={8}
+                              width={Math.max(1,((e-s)/Math.max(n-1,1))*266)}
+                              height={H-36}
+                              fill={C.red} opacity="0.15"/>
+                          ))}
+                        </svg>
+                      </div>
                     </ExpandableChart>
                     <div style={{height:8}}/>
                   </Card>
