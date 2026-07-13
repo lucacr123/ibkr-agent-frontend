@@ -896,7 +896,7 @@ export default function App(){
               onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}}
               placeholder="Ask about portfolio, charts, any stock…"
               rows={1}
-              style={{flex:1,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",color:C.textPrimary,fontSize:14,outline:"none",fontFamily:"inherit",resize:"none",overflowY:"hidden",lineHeight:1.5,maxHeight:120,overflowX:"hidden",wordBreak:"break-word"}}
+              style={{flex:1,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",color:C.textPrimary,fontSize:16,outline:"none",fontFamily:"inherit",resize:"none",overflowY:"hidden",lineHeight:1.5,maxHeight:120,overflowX:"hidden",wordBreak:"break-word"}}
               ref={el=>{if(el){el.style.height="auto";el.style.height=Math.min(el.scrollHeight,120)+"px";}}}
               onInput={e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,120)+"px";}}
             />
