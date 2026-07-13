@@ -877,7 +877,7 @@ export default function App(){
 
       {/* Tabs */}
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
-        {[["chat","💬","Chat"],["portfolio","📊","Portfolio"],["charts","📈","Charts"],["regime","🔴","Regime"],["schedule","⏱","Schedule"]].map(([id,icon,label])=>(
+        {[["chat","💬","Chat"],["portfolio","📊","Portfolio"],["charts","📈","Charts"],["regime","🔴","Regime"],["schedule","⏱","Schedule"],["backtest","🧪","Backtest"]].map(([id,icon,label])=>(
           <button key={id} onClick={()=>{setTab(id);if(id==="charts"&&!quotes.length)loadQuotes();if(id==="regime"&&!regimeData&&!regimeLoading)loadRegime();}}
             style={{flex:1,padding:"10px 0",background:"none",border:"none",cursor:"pointer",fontSize:11,fontWeight:tab===id?700:400,color:tab===id?C.goldText:C.textMuted,borderBottom:tab===id?`2px solid ${C.gold}`:"2px solid transparent"}}>
             {icon} {label}
@@ -1421,7 +1421,108 @@ export default function App(){
         </div>
       )}
 
-      <style>{`input::placeholder{color:#3A4060;}*{-webkit-tap-highlight-color:transparent;}::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#252A38;border-radius:2px;}`}</style>
+      {tab==="backtest"&&(()=>{
+        const [btInput,   setBtInput]   = useState("");
+        const [btRunning, setBtRunning] = useState(false);
+        const [btResult,  setBtResult]  = useState(null);
+        const [btError,   setBtError]   = useState(null);
+
+        async function runBacktest() {
+          if (!btInput.trim()) return;
+          setBtRunning(true); setBtResult(null); setBtError(null);
+          try {
+            const r = await fetch(`${BACKEND}/api/backtest/run`, {
+              method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({ instruction: btInput.trim() })
+            });
+            const d = await r.json();
+            if (!r.ok) setBtError(d.error || "Unknown error");
+            else setBtResult(d);
+          } catch(e) { setBtError(e.message); }
+          setBtRunning(false);
+        }
+
+        const examples = [
+          "Momentum strategy on my portfolio: buy when 30d z-score > 1.5, sell when < 0. 5Y.",
+          "Buy & hold CSPX.L vs equal-weight my portfolio. 5Y comparison.",
+          "Regime-switching: hold portfolio in normal regime, go to cash in stress (use VIX > 25 as stress signal). 5Y.",
+          "Mean reversion on IEEM.L: buy when RSI < 30, sell when RSI > 70. 5Y.",
+        ];
+
+        return (
+          <div style={{flex:1,overflowY:"auto",padding:16}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.goldText,marginBottom:4}}>🧪 Python Backtester</div>
+            <div style={{fontSize:12,color:C.textMuted,marginBottom:14,lineHeight:1.6}}>
+              Describe any strategy. Claude writes the Python script, runs it on Railway, and emails you the results + code to audit in your own notebook.
+            </div>
+
+            {/* Examples */}
+            <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Example strategies</div>
+            {examples.map((ex,i)=>(
+              <button key={i} onClick={()=>setBtInput(ex)}
+                style={{display:"block",width:"100%",textAlign:"left",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:7,color:C.textMuted,fontSize:12,cursor:"pointer",lineHeight:1.5}}>
+                {ex}
+              </button>
+            ))}
+
+            {/* Input */}
+            <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"14px 0 8px"}}>Your instruction</div>
+            <textarea value={btInput} onChange={e=>setBtInput(e.target.value)}
+              placeholder="Describe the backtest you want…"
+              rows={4}
+              style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",color:C.textPrimary,fontSize:15,outline:"none",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",lineHeight:1.6}}
+            />
+            <button onClick={runBacktest} disabled={btRunning||!btInput.trim()}
+              style={{width:"100%",marginTop:10,background:btRunning?C.goldDim:C.gold,border:"none",borderRadius:12,padding:"13px 0",color:"#0D0F14",fontSize:15,fontWeight:700,cursor:btRunning?"default":"pointer",opacity:!btInput.trim()?0.5:1}}>
+              {btRunning?"⏳ Running… (~30–60s)":"🚀 Run Backtest & Email Results"}
+            </button>
+
+            {/* Running state */}
+            {btRunning&&(
+              <div style={{marginTop:16,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:16,textAlign:"center"}}>
+                <div style={{fontSize:24,marginBottom:8}}>⏳</div>
+                <div style={{fontSize:14,fontWeight:600,color:C.goldText,marginBottom:6}}>Running backtest…</div>
+                <div style={{fontSize:12,color:C.textMuted,lineHeight:1.7}}>
+                  1. Claude is writing the Python script<br/>
+                  2. Railway is fetching market data & running it<br/>
+                  3. Results will be emailed + push notification sent<br/>
+                  <span style={{color:C.textDim}}>This takes 30–90 seconds</span>
+                </div>
+              </div>
+            )}
+
+            {/* Result */}
+            {btResult&&(
+              <div style={{marginTop:16,background:"#1A2A1A",border:`1px solid ${C.green}44`,borderRadius:12,padding:16}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.green,marginBottom:8}}>✅ Backtest complete — results emailed!</div>
+                <div style={{fontSize:13,color:C.textPrimary,marginBottom:10}}>{btResult.label}</div>
+                {btResult.metrics&&(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                    {Object.entries(btResult.metrics).slice(0,8).map(([k,v])=>(
+                      <div key={k} style={{background:C.surface,borderRadius:8,padding:"8px 10px"}}>
+                        <div style={{fontSize:9,color:C.textDim,textTransform:"uppercase",marginBottom:2}}>{k.replace(/_/g," ")}</div>
+                        <Mono style={{fontSize:13,fontWeight:700,color:C.green}}>{typeof v==="number"?v.toFixed(3):v}</Mono>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {btResult.trades!==undefined&&<div style={{fontSize:11,color:C.textMuted,marginTop:10}}>{btResult.trades} trades · Full results + Python script in your email</div>}
+              </div>
+            )}
+
+            {/* Error */}
+            {btError&&(
+              <div style={{marginTop:16,background:"#2A1A1A",border:`1px solid ${C.red}44`,borderRadius:12,padding:16}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.red,marginBottom:6}}>❌ Error</div>
+                <div style={{fontSize:12,color:C.textMuted,fontFamily:C.mono,whiteSpace:"pre-wrap"}}>{btError}</div>
+                <div style={{fontSize:11,color:C.textDim,marginTop:8}}>Try rephrasing your instruction or simplifying the strategy.</div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      <style>{`input::placeholder{color:#3A4060;}textarea::placeholder{color:#3A4060;}*{-webkit-tap-highlight-color:transparent;}::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#252A38;border-radius:2px;}`}</style>
     </div>
   );
 }
