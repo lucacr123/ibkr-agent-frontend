@@ -732,7 +732,21 @@ export default function App(){
   const [regimeLoading,setRegimeLoading]=useState(false);
   const [regimeError,setRegimeError]=useState(null);
   const chatEndRef=useRef(null);
+  const chatScrollRef=useRef(null);
   useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
+
+  // iOS keyboard: when keyboard opens, scroll messages to bottom so they stay visible
+  useEffect(()=>{
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const handler = () => {
+      if (chatScrollRef.current) {
+        chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+      }
+    };
+    vv.addEventListener("resize", handler);
+    return () => vv.removeEventListener("resize", handler);
+  }, []);
   useEffect(()=>{loadPortfolio();loadTasks();loadLog();checkStatus();checkPush();},[]);
 
   async function checkStatus(){try{const r=await fetch(`${BACKEND}/api/ibkr/status`);const d=await r.json();setIbkrOk(d.authenticated);}catch{setIbkrOk(false);}}
@@ -842,7 +856,7 @@ export default function App(){
   };
 
   return(
-    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"Inter,system-ui,sans-serif",color:C.textPrimary,maxWidth:480,margin:"0 auto",display:"flex",flexDirection:"column",height:"100dvh"}}>
+    <div style={{background:C.bg,minHeight:"100vh",fontFamily:"Inter,system-ui,sans-serif",color:C.textPrimary,maxWidth:480,margin:"0 auto",display:"flex",flexDirection:"column",height:"100vh",position:"fixed",top:0,left:0,right:0,bottom:0,maxWidth:480,margin:"0 auto"}}>
 
       {/* Header — safe area for iPhone notch */}
       <div style={{paddingTop:"max(14px, env(safe-area-inset-top))",paddingBottom:12,paddingLeft:18,paddingRight:18,borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
@@ -874,8 +888,7 @@ export default function App(){
       {/* ══ CHAT ══════════════════════════════════════════════════ */}
       {tab==="chat"&&(
         <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-          <div style={{flex:1,overflowY:"auto",padding:16}}>
-            <PushBanner/>
+          <div ref={chatScrollRef} style={{flex:1,overflowY:"auto",padding:16}}>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
               {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
