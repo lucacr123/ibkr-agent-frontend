@@ -796,7 +796,9 @@ export default function App(){
                     <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Combined Net Liquidation</div>
                     <Mono style={{fontSize:24,fontWeight:700,color:C.goldText}}>{fmtEUR(combined.totalNetLiquidation)}</Mono>
                     {combined.avgYtdReturnPct!==0&&<div style={{marginTop:6}}>
-                      <div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN</div><Mono style={{fontSize:14,fontWeight:700,color:combined.avgYtdReturnPct>=0?C.green:C.red}}>{combined.avgYtdReturnPct>0?"+":""}{combined.avgYtdReturnPct}%</Mono>
+                      <div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN (IBKR)</div>
+                      <Mono style={{fontSize:14,fontWeight:700,color:combined.avgYtdReturnPct>=0?C.green:C.red}}>{combined.avgYtdReturnPct>0?"+":" "}{combined.avgYtdReturnPct}%</Mono>
+                      <div style={{fontSize:9,color:C.textDim,marginTop:2}}>Actual broker return incl. cash, fees & FX</div>
                     </div>}
                   </Card>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
@@ -814,7 +816,7 @@ export default function App(){
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:14}}>
                         {[
                           {label:"Sharpe",val:combined.metrics1Y.sharpe!==null&&combined.metrics1Y.sharpe!==undefined?combined.metrics1Y.sharpe.toFixed(2):"—",color:combined.metrics1Y.sharpe>1?C.green:combined.metrics1Y.sharpe<0?C.red:C.amber},
-                          {label:"1Y return",val:combined.metrics1Y.annualizedReturnPct!==null&&combined.metrics1Y.annualizedReturnPct!==undefined?combined.metrics1Y.annualizedReturnPct.toFixed(1)+"%":"—",color:combined.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
+                          {label:"1Y Return (model)",val:combined.metrics1Y.annualizedReturnPct!==null&&combined.metrics1Y.annualizedReturnPct!==undefined?combined.metrics1Y.annualizedReturnPct.toFixed(1)+"%":"—",color:combined.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
                           {label:"Max DD",val:combined.metrics1Y.maxDrawdownPct!==null&&combined.metrics1Y.maxDrawdownPct!==undefined?combined.metrics1Y.maxDrawdownPct.toFixed(1)+"%":"—",color:C.red},
                           {label:"VaR 95",val:combined.metrics1Y.var95Pct!==null&&combined.metrics1Y.var95Pct!==undefined?combined.metrics1Y.var95Pct.toFixed(2)+"%":"—",color:C.red},
                           {label:"Info Ratio",val:combined.metrics1Y.informationRatioVsSPX!==null?combined.metrics1Y.informationRatioVsSPX?.toFixed(2):"—",color:C.blue},
@@ -822,7 +824,7 @@ export default function App(){
                           {label:"Calmar",val:combined.metrics1Y.calmar!==null?combined.metrics1Y.calmar?.toFixed(2):"—",color:C.gold},
                           {label:"Ann. Vol",val:combined.metrics1Y.annualizedVolPct!==null&&combined.metrics1Y.annualizedVolPct!==undefined?combined.metrics1Y.annualizedVolPct.toFixed(1)+"%":"—",color:C.textPrimary},
                           {label:"Sortino",val:combined.metrics1Y.sortino?.toFixed(2),color:combined.metrics1Y.sortino>1?C.green:combined.metrics1Y.sortino<0?C.red:C.amber},
-                          {label:"CVaR 95",val:combined.metrics1Y.cvar95Pct!==null&&combined.metrics1Y.cvar95Pct!==undefined?combined.metrics1Y.cvar95Pct.toFixed(2)+"%":"—",color:C.red},
+                          {label:"CVaR 95",val:combined.metrics1Y.cvar95Pct!==null&&combined.metrics1Y.cvar95Pct!==undefined?combined.metrics1Y.cvar95Pct.toFixed(2)+"%":"—",color:C.red},{label:"Z-score (30d)",val:combined.metrics1Y.zScore30d!==null&&combined.metrics1Y.zScore30d!==undefined?combined.metrics1Y.zScore30d.toFixed(2):"—",color:combined.metrics1Y.zScore30d>2?C.red:combined.metrics1Y.zScore30d<-2?C.green:C.amber},
                         ].map(st=>(
                           <Card key={st.label} style={{padding:"10px 8px",marginBottom:0,textAlign:"center"}}>
                             <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{st.label}</div>
@@ -830,7 +832,7 @@ export default function App(){
                           </Card>
                         ))}
                       </div>
-                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>Method: current weights × 1Y Yahoo daily-return correlation/covariance matrix. Sharpe/Sortino = (return − risk-free rate) / vol, risk-free = {combined.metrics1Y.riskFreeRatePct??"3.64"}% (SOFR); benchmark = SPX.</div>
+                      <div style={{fontSize:10,color:C.textDim,margin:"-6px 0 12px"}}>1Y Return (model) = hypothetical return at current weights × Yahoo closes, no cash/fees/FX. Differs from IBKR actual return shown above. All metrics: 252 trading days, geometric annualisation, vol = rolling 1Y std × √252, SOFR risk-free = {combined.metrics1Y.riskFreeRatePct??"3.64"}%, benchmark = SPX. CVaR 95% = average loss in worst 5% of days (total, not incremental above VaR).</div>
                       {combined.metrics1Y.drawdownSeries&&<QuantPanel label="Portfolio drawdown % from peak" series={combined.metrics1Y.drawdownSeries} dates={combined.metrics1Y.dates} color={C.red} showZero={false} id="pf_drawdown"/>}
                       {combined.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={combined.metrics1Y.dates.map((date,i)=>({date,close:combined.metrics1Y.portfolioIndex[i]}))} height={170} id="pf_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>Reconstructed portfolio index (current weights × 1Y daily returns). Start = 100.</div></div>}
 
@@ -943,11 +945,41 @@ export default function App(){
 
               {portfolioView==="u1"&&acct1&&(
                 <>
+                  <Card style={{padding:"16px",marginBottom:10}}>
+                    <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>EUR Account · U11354150</div>
+                    <Mono style={{fontSize:22,fontWeight:700,color:C.goldText}}>{fmtEUR(acct1.netLiquidation)}</Mono>
+                    <div style={{marginTop:6}}>
+                      <div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN (IBKR)</div>
+                      <Mono style={{fontSize:14,fontWeight:700,color:acct1.ytdReturn>=0?C.green:C.red}}>{acct1.ytdReturn>0?"+":""}{acct1.ytdReturn?.toFixed(2)}%</Mono>
+                      <div style={{fontSize:9,color:C.textDim,marginTop:2}}>Actual broker return incl. cash, fees & FX</div>
+                    </div>
+                  </Card>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
-                    {[{label:"Net Liquidation",val:fmtEUR(acct1.netLiquidation)},{label:"Cash",val:fmtEUR(acct1.cash)},{label:"1Y Return",val:`${acct1.ytdReturn>0?"+":""}${acct1.ytdReturn?.toFixed(2)}%`,color:acct1.ytdReturn>=0?C.green:C.red},{label:"Stock Value",val:fmtEUR(acct1.stockValue)}].map(s=>(
-                      <Card key={s.label} style={{padding:"12px 14px"}}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div><Mono style={{fontSize:15,fontWeight:700,color:s.color||C.textPrimary}}>{s.val}</Mono></Card>
+                    {[{label:"Cash",val:fmtEUR(acct1.cash)},{label:"Stock Value",val:fmtEUR(acct1.stockValue)},{label:"Unrealized P&L",val:acct1.unrealizedPnl,isPnl:true},{label:"Dividends (1Y)",val:fmtEUR(acct1.dividends)}].map(s=>(
+                      <Card key={s.label} style={{padding:"12px 14px"}}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div>{s.isPnl?<PnlText value={s.val} style={{fontSize:15}}/>:<Mono style={{fontSize:15,fontWeight:700}}>{s.val}</Mono>}</Card>
                     ))}
                   </div>
+                  {acct1.metrics1Y&&(<>
+                    <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 0 8px"}}>1Y risk metrics (model)</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:10}}>
+                      {[
+                        {label:"Sharpe",val:acct1.metrics1Y.sharpe?.toFixed(2),color:acct1.metrics1Y.sharpe>1?C.green:acct1.metrics1Y.sharpe<0?C.red:C.amber},
+                        {label:"1Y Return",val:acct1.metrics1Y.annualizedReturnPct?.toFixed(1)+"%",color:acct1.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
+                        {label:"Ann. Vol",val:acct1.metrics1Y.annualizedVolPct?.toFixed(1)+"%",color:C.textPrimary},
+                        {label:"Max DD",val:acct1.metrics1Y.maxDrawdownPct?.toFixed(1)+"%",color:C.red},
+                        {label:"VaR 95",val:acct1.metrics1Y.var95Pct?.toFixed(2)+"%",color:C.red},
+                        {label:"CVaR 95",val:acct1.metrics1Y.cvar95Pct?.toFixed(2)+"%",color:C.red},
+                      ].map(st=>(
+                        <Card key={st.label} style={{padding:"10px 8px",textAlign:"center"}}>
+                          <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{st.label}</div>
+                          <Mono style={{fontSize:13,fontWeight:700,color:st.color}}>{st.val??"—"}</Mono>
+                        </Card>
+                      ))}
+                    </div>
+                    {acct1.metrics1Y.drawdownSeries&&<QuantPanel label="Drawdown % from peak" series={acct1.metrics1Y.drawdownSeries} dates={acct1.metrics1Y.dates} color={C.red} showZero={false} id="u1_drawdown"/>}
+                    {acct1.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={acct1.metrics1Y.dates.map((date,i)=>({date,close:acct1.metrics1Y.portfolioIndex[i]}))} height={160} id="u1_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>EUR account holdings × 1Y daily returns (model, start = 100)</div></div>}
+                  </>)}
+                  <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"8px 0 8px"}}>Positions</div>
                   {acct1.positions.map(p=>(
                     <Card key={p.symbol}><div style={{display:"flex",justifyContent:"space-between"}}><div><Mono style={{fontSize:14,fontWeight:700}}>{p.symbol}</Mono><div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{p.quantity} × {p.currency} {parseFloat(p.markPrice).toFixed(2)}</div></div><div style={{textAlign:"right"}}><Mono style={{fontSize:14,fontWeight:600}}>{p.currency} {parseFloat(p.positionValue).toFixed(2)}</Mono><div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{fmtPct(p.percentOfAccountNAV)}</div></div></div></Card>
                   ))}
@@ -956,11 +988,42 @@ export default function App(){
 
               {portfolioView==="u2"&&acct2&&(
                 <>
+                  <Card style={{padding:"16px",marginBottom:10}}>
+                    <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>GBP Account · U9733561 (ISA)</div>
+                    <Mono style={{fontSize:22,fontWeight:700,color:C.goldText}}>{fmtGBP(acct2.netLiquidation)}</Mono>
+                    <div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{fmtEUR(acct2.netLiquidationEUR)} in EUR</div>
+                    <div style={{marginTop:6}}>
+                      <div style={{fontSize:10,color:C.textMuted,marginBottom:2}}>1Y RETURN (IBKR)</div>
+                      <Mono style={{fontSize:14,fontWeight:700,color:acct2.ytdReturn>=0?C.green:C.red}}>{acct2.ytdReturn>0?"+":""}{acct2.ytdReturn?.toFixed(2)}%</Mono>
+                      <div style={{fontSize:9,color:C.textDim,marginTop:2}}>Actual broker return incl. cash, fees & FX</div>
+                    </div>
+                  </Card>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
-                    {[{label:"Net Liquidation",val:fmtGBP(acct2.netLiquidation)},{label:"In EUR",val:fmtEUR(acct2.netLiquidationEUR)},{label:"Cash",val:fmtGBP(acct2.cash)},{label:"1Y Return",val:`${acct2.ytdReturn>0?"+":""}${acct2.ytdReturn?.toFixed(2)}%`,color:acct2.ytdReturn>=0?C.green:C.red}].map(s=>(
-                      <Card key={s.label} style={{padding:"12px 14px"}}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div><Mono style={{fontSize:15,fontWeight:700,color:s.color||C.textPrimary}}>{s.val}</Mono></Card>
+                    {[{label:"Cash (GBP)",val:fmtGBP(acct2.cash)},{label:"Stock Value",val:fmtGBP(acct2.stockValue)},{label:"Unrealized P&L",val:acct2.unrealizedPnl,isPnl:true},{label:"Dividends (1Y)",val:fmtGBP(acct2.dividends)}].map(s=>(
+                      <Card key={s.label} style={{padding:"12px 14px"}}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{s.label}</div>{s.isPnl?<PnlText value={s.val} style={{fontSize:15}}/>:<Mono style={{fontSize:15,fontWeight:700}}>{s.val}</Mono>}</Card>
                     ))}
                   </div>
+                  {acct2.metrics1Y&&(<>
+                    <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 0 8px"}}>1Y risk metrics (model)</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:10}}>
+                      {[
+                        {label:"Sharpe",val:acct2.metrics1Y.sharpe?.toFixed(2),color:acct2.metrics1Y.sharpe>1?C.green:acct2.metrics1Y.sharpe<0?C.red:C.amber},
+                        {label:"1Y Return",val:acct2.metrics1Y.annualizedReturnPct?.toFixed(1)+"%",color:acct2.metrics1Y.annualizedReturnPct>=0?C.green:C.red},
+                        {label:"Ann. Vol",val:acct2.metrics1Y.annualizedVolPct?.toFixed(1)+"%",color:C.textPrimary},
+                        {label:"Max DD",val:acct2.metrics1Y.maxDrawdownPct?.toFixed(1)+"%",color:C.red},
+                        {label:"VaR 95",val:acct2.metrics1Y.var95Pct?.toFixed(2)+"%",color:C.red},
+                        {label:"CVaR 95",val:acct2.metrics1Y.cvar95Pct?.toFixed(2)+"%",color:C.red},
+                      ].map(st=>(
+                        <Card key={st.label} style={{padding:"10px 8px",textAlign:"center"}}>
+                          <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{st.label}</div>
+                          <Mono style={{fontSize:13,fontWeight:700,color:st.color}}>{st.val??"—"}</Mono>
+                        </Card>
+                      ))}
+                    </div>
+                    {acct2.metrics1Y.drawdownSeries&&<QuantPanel label="Drawdown % from peak" series={acct2.metrics1Y.drawdownSeries} dates={acct2.metrics1Y.dates} color={C.red} showZero={false} id="u2_drawdown"/>}
+                    {acct2.metrics1Y.portfolioIndex&&<div style={{marginBottom:12,marginTop:4}}><PriceChart bars={acct2.metrics1Y.dates.map((date,i)=>({date,close:acct2.metrics1Y.portfolioIndex[i]}))} height={160} id="u2_index"/><div style={{fontSize:10,color:C.textDim,marginTop:4}}>GBP account holdings × 1Y daily returns (model, start = 100)</div></div>}
+                  </>)}
+                  <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"8px 0 8px"}}>Positions</div>
                   {acct2.positions.map(p=>(
                     <Card key={p.symbol}><div style={{display:"flex",justifyContent:"space-between"}}><div><Mono style={{fontSize:14,fontWeight:700}}>{p.symbol}</Mono><div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{p.quantity} × {p.currency} {parseFloat(p.markPrice).toFixed(2)}</div></div><div style={{textAlign:"right"}}><Mono style={{fontSize:14,fontWeight:600}}>{p.currency} {parseFloat(p.positionValue).toFixed(2)}</Mono><div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{fmtPct(p.percentOfAccountNAV)}</div></div></div></Card>
                   ))}
@@ -1097,7 +1160,7 @@ export default function App(){
       {/* ══ REGIME ════════════════════════════════════════════════ */}
       {tab==="regime"&&(
         <div style={{flex:1,overflowY:"auto",padding:16}}>
-          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · Full-sample HMM · VIX + MOVE + iTraxx vol (5Y)</div>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · 2-State HMM · VIX + MOVE{regimeData?.useDxst?" + DXST.DE vol":""} · 5Y full-sample</div>
           {!regimeData&&!regimeLoading&&!regimeError&&(
             <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>🔴 Run HMM Regime Detection</button>
           )}
@@ -1105,7 +1168,7 @@ export default function App(){
             <div style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:28,marginBottom:12}}>⏳</div>
               <div style={{color:C.textMuted,fontSize:14,fontWeight:600}}>Fitting HMM model…</div>
-              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX · OVX · XTC5 (Xtrackers iTraxx)<br/>Running Baum-Welch EM (100 iters)<br/>~20 seconds</div>
+              <div style={{color:C.textDim,fontSize:12,marginTop:8,lineHeight:1.6}}>Fetching 5Y of VIX + MOVE + DXST.DE<br/>Running Baum-Welch EM · 100 iterations<br/>~20 seconds</div>
             </div>
           )}
           {regimeError&&(
@@ -1116,7 +1179,7 @@ export default function App(){
             </div>
           )}
           {regimeData&&!regimeLoading&&(()=>{
-            const{portfolioIndex,normalStats,stressStats,normalDist,stressDist,currentRegime,currentStressProb,currentVix,stressProbFull,normalDays,stressDays,featureDays,stateMeans,method}=regimeData;
+            const{portfolioIndex,normalStats,stressStats,normalDist,stressDist,currentRegime,currentStressProb,currentVix,stressProbFull,normalDays,stressDays,featureDays,stateMeans,method,useDxst}=regimeData;
             const isStress=currentRegime===1;
             const stressPct=currentStressProb!==null?(currentStressProb*100).toFixed(1):"—";
             return(<>
@@ -1125,7 +1188,7 @@ export default function App(){
                 <div>
                   <div style={{fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}>Current Regime</div>
                   <div style={{fontSize:22,fontWeight:800,color:isStress?C.red:C.green}}>{isStress?"🔴 STRESS":"🟢 NORMAL"}</div>
-                  <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)}</Mono> · MOVE: <Mono style={{color:C.textPrimary}}>{regimeData.currentMove?.toFixed(1)}</Mono> · iTraxx vol: <Mono style={{color:C.textPrimary}}>{regimeData.currentDxstVol?.toFixed(1)}%</Mono> · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
+                  <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>VIX: <Mono style={{color:C.textPrimary}}>{currentVix?.toFixed(1)??"—"}</Mono> · MOVE: <Mono style={{color:C.textPrimary}}>{regimeData.currentMove?.toFixed(1)??"—"}</Mono>{regimeData.useDxst&&regimeData.currentDxstVol!=null&&<> · DXST vol: <Mono style={{color:C.textPrimary}}>{regimeData.currentDxstVol.toFixed(1)}%</Mono></>} · P(stress): <Mono style={{color:isStress?C.red:C.green}}>{stressPct}%</Mono></div>
                   <div style={{fontSize:11,color:C.textDim,marginTop:3}}>Normal: {normalDays}d · Stress: {stressDays}d (last 1Y)</div>
                 </div>
                 <svg viewBox="0 0 70 70" style={{width:70,height:70,flexShrink:0,display:"block"}}>
