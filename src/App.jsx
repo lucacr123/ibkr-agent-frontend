@@ -844,8 +844,8 @@ export default function App(){
   return(
     <div style={{background:C.bg,minHeight:"100vh",fontFamily:"Inter,system-ui,sans-serif",color:C.textPrimary,maxWidth:480,margin:"0 auto",display:"flex",flexDirection:"column",height:"100dvh"}}>
 
-      {/* Header */}
-      <div style={{padding:"14px 18px 12px",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
+      {/* Header — safe area for iPhone notch */}
+      <div style={{paddingTop:"max(14px, env(safe-area-inset-top))",paddingBottom:12,paddingLeft:18,paddingRight:18,borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:32,height:32,borderRadius:8,background:C.goldDim,border:`1px solid ${C.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>📊</div>
@@ -891,10 +891,15 @@ export default function App(){
             ))}
             <div ref={chatEndRef}/>
           </div>
-          <div style={{padding:"12px 14px",borderTop:`1px solid ${C.border}`,background:C.surface,display:"flex",gap:10,flexShrink:0}}>
-            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendMessage()}
+          <div style={{padding:"12px 14px",borderTop:`1px solid ${C.border}`,background:C.surface,display:"flex",gap:10,flexShrink:0,paddingBottom:"max(12px, env(safe-area-inset-bottom))"}}>
+            <textarea value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}}
               placeholder="Ask about portfolio, charts, any stock…"
-              style={{flex:1,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",color:C.textPrimary,fontSize:14,outline:"none",fontFamily:"inherit"}}/>
+              rows={1}
+              style={{flex:1,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",color:C.textPrimary,fontSize:14,outline:"none",fontFamily:"inherit",resize:"none",overflowY:"hidden",lineHeight:1.5,maxHeight:120,overflowX:"hidden",wordBreak:"break-word"}}
+              ref={el=>{if(el){el.style.height="auto";el.style.height=Math.min(el.scrollHeight,120)+"px";}}}
+              onInput={e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,120)+"px";}}
+            />
             <button onClick={sendMessage} disabled={loading} style={{background:loading?C.goldDim:C.gold,border:"none",borderRadius:12,width:44,cursor:loading?"default":"pointer",color:"#0D0F14",fontSize:20,fontWeight:900}}>↑</button>
           </div>
         </div>
