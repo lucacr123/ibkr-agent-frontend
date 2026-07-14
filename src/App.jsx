@@ -979,7 +979,10 @@ export default function App(){
                             const wt = combined.metrics1Y?.weights?.find(w=>w.symbol===p.symbol);
                             const riskPct = wt?.riskContribPct ?? null;
                             const totalNLV = combined.totalNetLiquidation || 1;
-                            const riskEUR = riskPct !== null ? (riskPct/100)*totalNLV : null;
+                            // riskEUR = how much EUR of vol this position contributes
+                            // = (risk contrib % of portfolio vol) * portfolio vol * NAV / 100
+                            const portVolPct = combined.metrics1Y?.annualizedVolPct || 13.5;
+                            const riskEUR = riskPct !== null ? (riskPct/100) * (portVolPct/100) * totalNLV : null;
                             return(<>
                               <AllocationBar pct={p.allocationPct}/>
                               {riskPct!==null&&(
