@@ -970,10 +970,31 @@ export default function App(){
                           <div style={{display:"flex",alignItems:"center",gap:8}}>
                             <Mono style={{fontSize:15,fontWeight:700}}>{p.symbol}</Mono>
                             <span style={{fontSize:11,color:C.textMuted}}>{fmtPct(p.allocationPct)}</span>
+                            {(()=>{const wt=combined.metrics1Y?.weights?.find(w=>w.symbol===p.symbol);return wt?.riskContribPct!=null?<span style={{fontSize:10,color:C.red,marginLeft:4}}>⚡{wt.riskContribPct.toFixed(1)}%</span>:null;})()}
                             <button onClick={()=>{const sym=YF[p.symbol]||p.symbol;setChartInput(sym);setTab("charts");loadChart(sym);}} style={{marginLeft:"auto",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:6,padding:"2px 8px",color:C.goldText,fontSize:11,cursor:"pointer"}}>Chart</button>
                           </div>
                           <div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{p.description}</div>
-                          <AllocationBar pct={p.allocationPct}/>
+                          {/* Weight bar (yellow) + Risk contribution bar (red) */}
+                          {(()=>{
+                            const wt = combined.metrics1Y?.weights?.find(w=>w.symbol===p.symbol);
+                            const riskPct = wt?.riskContribPct ?? null;
+                            const totalNLV = combined.totalNetLiquidation || 1;
+                            const riskEUR = riskPct !== null ? (riskPct/100)*totalNLV : null;
+                            return(<>
+                              <AllocationBar pct={p.allocationPct}/>
+                              {riskPct!==null&&(
+                                <div style={{marginTop:4}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                                    <span style={{fontSize:9,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.05em"}}>Risk contribution</span>
+                                    <span style={{fontSize:9,color:C.red,fontFamily:C.mono}}>{riskPct.toFixed(1)}% vol · {fmtEUR(riskEUR)}</span>
+                                  </div>
+                                  <div style={{height:3,background:C.border,borderRadius:2,overflow:"hidden"}}>
+                                    <div style={{width:`${Math.min(riskPct*2,100)}%`,height:"100%",background:C.red,borderRadius:2,opacity:0.7}}/>
+                                  </div>
+                                </div>
+                              )}
+                            </>);
+                          })()}
                           {p.legs.length>1&&<div style={{fontSize:11,color:C.textDim,marginTop:4}}>{p.legs.map(l=>`${l.accountId.slice(-7)}: ${l.quantity}`).join(" · ")}</div>}
                         </div>
                         <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
@@ -1460,7 +1481,7 @@ export default function App(){
             try{
               const r=await fetch(`${BACKEND}/api/backtest/run`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({instruction:btInput.trim()})});
               const d=await r.json();
-              if(!r.ok)setBtError(d.error||"Unknown error");
+              if(!r.ok)setBtError((d.error||"Error")+(d.detail?"\n\n"+d.detail.slice(0,400):""));
               else setBtResult(d);
             }catch(e){setBtError(e.message);}
             setBtRunning(false);
