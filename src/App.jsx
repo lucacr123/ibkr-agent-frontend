@@ -1510,79 +1510,77 @@ export default function App(){
           </>)}
 
           {btMode==="montecarlo"&&(<>
-              <div style={{fontSize:11,color:C.textMuted,marginBottom:10,lineHeight:1.6}}>
-                Simulates 1,000 price paths using stochastic volatility (Heston) + jumps (Merton). Parameters calibrated from real historical data.
-              </div>
-              <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Symbol (Yahoo Finance)</div>
-              <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-                {["CNDX.L","CSPX.L","IEEM.L","VUAG.L","VWRL.L","CSSX5E.SW","NQSE.DE","^GSPC","^VIX"].map(s=>(
-                  <button key={s} onClick={()=>setMcSym(s)}
-                    style={{background:mcSym===s?C.goldDim:C.surfaceHigh,border:`1px solid ${mcSym===s?C.gold:C.border}`,borderRadius:8,padding:"4px 10px",color:mcSym===s?C.gold:C.textMuted,fontSize:11,cursor:"pointer"}}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <input value={mcSym} onChange={e=>setMcSym(e.target.value)} placeholder="Or type any Yahoo symbol…"
-                style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",color:C.textPrimary,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:10}}/>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                <div>
-                  <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",marginBottom:4}}>Horizon</div>
-                  {[["63","3M"],["126","6M"],["252","1Y"],["504","2Y"]].map(([v,l])=>(
-                    <button key={v} onClick={()=>setMcDays(v)}
-                      style={{marginRight:4,marginBottom:4,background:mcDays===v?C.goldDim:C.surfaceHigh,border:`1px solid ${mcDays===v?C.gold:C.border}`,borderRadius:8,padding:"4px 8px",color:mcDays===v?C.gold:C.textMuted,fontSize:11,cursor:"pointer"}}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-                <div>
-                  <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",marginBottom:4}}>Model</div>
-                  {[["gbm","GBM"],["heston","Heston"],["heston_jump","Heston+Jumps"]].map(([v,l])=>(
-                    <button key={v} onClick={()=>setMcModel(v)}
-                      style={{display:"block",marginBottom:4,background:mcModel===v?C.goldDim:C.surfaceHigh,border:`1px solid ${mcModel===v?C.gold:C.border}`,borderRadius:8,padding:"4px 8px",color:mcModel===v?C.gold:C.textMuted,fontSize:11,cursor:"pointer"}}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:11,color:C.textDim,lineHeight:1.7}}>
-                <strong style={{color:C.textMuted}}>GBM</strong> — Geometric Brownian Motion (baseline)<br/>
-                <strong style={{color:C.textMuted}}>Heston</strong> — Stochastic vol with mean reversion<br/>
-                <strong style={{color:C.textMuted}}>Heston+Jumps</strong> — Heston + Merton jump-diffusion (most realistic)
-              </div>
-              <button onClick={async()=>{
-                if(!mcSym.trim()||mcRunning)return;
-                setMcRunning(true);setMcResult(null);setMcError(null);
-                try{
-                  const r=await fetch(`${BACKEND}/api/backtest/montecarlo`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:mcSym.trim(),horizon_days:parseInt(mcDays),model:mcModel})});
-                  const d=await r.json();
-                  if(!r.ok)setMcError(d.error||"Error");
-                  else setMcResult(d);
-                }catch(e){setMcError(e.message);}
-                setMcRunning(false);
-              }} disabled={mcRunning||!mcSym.trim()}
-                style={{width:"100%",background:mcRunning?C.goldDim:C.gold,border:"none",borderRadius:12,padding:"13px 0",color:"#0D0F14",fontSize:15,fontWeight:700,cursor:mcRunning?"default":"pointer",opacity:!mcSym.trim()?0.5:1}}>
-                {mcRunning?"⏳ Simulating 1,000 paths… (~60s)":"🎲 Run Simulation & Email Results"}
+            <div style={{fontSize:11,color:C.textMuted,marginBottom:10,lineHeight:1.6}}>
+              Describe a strategy or portfolio. Claude calibrates a stochastic model from real historical returns, then simulates 1,000 forward paths over 12 months.
+            </div>
+            <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Example strategies</div>
+            {["Simulate 1Y forward paths for my equal-weight portfolio.",
+              "Monte Carlo on CSPX.L momentum strategy: buy when z-score > 1.5.",
+              "Simulate IEEM.L buy & hold — what does the return distribution look like?",
+              "Forward simulation of regime-switching: hold when VIX < 25, cash above."
+            ].map((ex,i)=>(
+              <button key={i} onClick={()=>setBtInput(ex)}
+                style={{display:"block",width:"100%",textAlign:"left",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:7,color:C.textMuted,fontSize:12,cursor:"pointer",lineHeight:1.5}}>
+                {ex}
               </button>
-              {mcRunning&&<div style={{marginTop:12,background:C.surfaceHigh,borderRadius:12,padding:14,textAlign:"center",fontSize:12,color:C.textMuted,lineHeight:1.8}}>
-                Calibrating {mcModel} from {mcSym} history<br/>
-                Simulating 1,000 paths × {mcDays} days<br/>
-                <span style={{color:C.textDim,fontSize:11}}>~60 seconds</span>
+            ))}
+            <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"10px 0 6px"}}>Stochastic model</div>
+            <div style={{display:"flex",gap:6,marginBottom:10}}>
+              {[["gbm","GBM"],["heston","Heston SV"],["heston_jump","Heston + Jumps"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setMcModel(v)}
+                  style={{flex:1,background:mcModel===v?C.goldDim:C.surfaceHigh,border:`1px solid ${mcModel===v?C.gold:C.border}`,borderRadius:8,padding:"6px 0",color:mcModel===v?C.gold:C.textMuted,fontSize:11,fontWeight:mcModel===v?700:400,cursor:"pointer"}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:10,color:C.textDim,lineHeight:1.7}}>
+              <b style={{color:C.textMuted}}>GBM</b> — constant drift + vol &nbsp;·&nbsp;
+              <b style={{color:C.textMuted}}>Heston</b> — mean-reverting stochastic vol &nbsp;·&nbsp;
+              <b style={{color:C.textMuted}}>Heston+Jumps</b> — adds Merton jump-diffusion (most realistic)
+            </div>
+            <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"0 0 8px"}}>Your instruction</div>
+            <textarea value={btInput} onChange={e=>setBtInput(e.target.value)}
+              placeholder="Describe the strategy or portfolio to simulate…"
+              rows={4}
+              style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",color:C.textPrimary,fontSize:15,outline:"none",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",lineHeight:1.6}}
+            />
+            <button onClick={async()=>{
+              if(!btInput.trim()||mcRunning)return;
+              setMcRunning(true);setMcResult(null);setMcError(null);
+              try{
+                const r=await fetch(`${BACKEND}/api/backtest/run`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({instruction:`Run a Monte Carlo forward simulation using the ${mcModel} stochastic process. Horizon: 12 months (252 trading days), 1000 paths. Strategy/portfolio: ${btInput.trim()}. First run the historical backtest to get the return series, then calibrate ${mcModel} parameters from those returns (mu, sigma, and for Heston: kappa/theta/xi/rho, for jumps: lambda/mu_j/sigma_j). Simulate 1000 forward paths. Produce: fan chart with P5/P25/Median/P75/P95 bands, terminal distribution histogram, cross-path vol through time, and a stats panel. Metrics must include: expected_return_pct, vol_terminal_pct, sharpe_annualised, prob_loss_pct, prob_gain_10pct, prob_gain_25pct, var95_pct, cvar95_pct, p5_price, p50_price, p95_price.`})});
+                const d=await r.json();
+                if(!r.ok)setMcError((d.error||"Error")+(d.detail?"
+
+"+d.detail.slice(0,400):""));
+                else setMcResult(d);
+              }catch(e){setMcError(e.message);}
+              setMcRunning(false);
+            }} disabled={mcRunning||!btInput.trim()}
+              style={{width:"100%",marginTop:10,background:mcRunning?C.goldDim:C.gold,border:"none",borderRadius:12,padding:"13px 0",color:"#0D0F14",fontSize:15,fontWeight:700,cursor:mcRunning?"default":"pointer",opacity:!btInput.trim()?0.5:1}}>
+              {mcRunning?"⏳ Simulating 1,000 paths… (~60s)":"🎲 Run Monte Carlo & Email Results"}
+            </button>
+            {mcRunning&&<div style={{marginTop:12,background:C.surfaceHigh,borderRadius:12,padding:14,textAlign:"center",fontSize:12,color:C.textMuted,lineHeight:1.8}}>
+              Calibrating {mcModel} parameters from historical returns<br/>
+              Simulating 1,000 paths × 252 days<br/>
+              <span style={{color:C.textDim,fontSize:11}}>~60–90 seconds</span>
+            </div>}
+            {mcResult&&<div style={{marginTop:12,background:"#1A2A1A",border:`1px solid ${C.green}44`,borderRadius:12,padding:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.green,marginBottom:6}}>✅ Simulation complete — results emailed!</div>
+              <div style={{fontSize:12,color:C.textPrimary,marginBottom:8}}>{mcResult.label}</div>
+              {mcResult.metrics&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                {Object.entries(mcResult.metrics).slice(0,8).map(([k,v])=>(
+                  <div key={k} style={{background:C.surface,borderRadius:8,padding:"6px 8px"}}>
+                    <div style={{fontSize:8,color:C.textDim,textTransform:"uppercase",marginBottom:1}}>{k.replace(/_/g," ")}</div>
+                    <Mono style={{fontSize:12,fontWeight:700,color:C.green}}>{typeof v==="number"?v.toFixed(2):v}</Mono>
+                  </div>
+                ))}
               </div>}
-              {mcResult&&<div style={{marginTop:12,background:"#1A2A1A",border:`1px solid ${C.green}44`,borderRadius:12,padding:14}}>
-                <div style={{fontSize:13,fontWeight:700,color:C.green,marginBottom:8}}>✅ Simulation complete — results emailed!</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
-                  {mcResult.metrics&&Object.entries(mcResult.metrics).filter(([k])=>!["symbol","model","n_paths","horizon_days","current_price","calibrated_mu","calibrated_sigma","calibrated_v0","calibrated_kappa","calibrated_theta","jump_intensity","jump_mu","jump_sigma"].includes(k)).map(([k,v])=>(
-                    <div key={k} style={{background:C.surface,borderRadius:8,padding:"6px 8px"}}>
-                      <div style={{fontSize:8,color:C.textDim,textTransform:"uppercase",marginBottom:1}}>{k.replace(/_/g," ")}</div>
-                      <Mono style={{fontSize:12,fontWeight:700,color:C.green}}>{typeof v==="number"?v.toFixed(typeof v===parseInt(v)?0:2):v}</Mono>
-                    </div>
-                  ))}
-                </div>
-              </div>}
-              {mcError&&<div style={{marginTop:12,background:"#2A1A1A",border:`1px solid ${C.red}44`,borderRadius:12,padding:12}}>
-                <div style={{fontSize:12,fontWeight:600,color:C.red,marginBottom:4}}>❌ Error</div>
-                <div style={{fontSize:11,color:C.textMuted,fontFamily:C.mono,whiteSpace:"pre-wrap"}}>{mcError}</div>
-              </div>}
+            </div>}
+            {mcError&&<div style={{marginTop:12,background:"#2A1A1A",border:`1px solid ${C.red}44`,borderRadius:12,padding:12}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.red,marginBottom:4}}>❌ Error</div>
+              <div style={{fontSize:11,color:C.textMuted,fontFamily:C.mono,whiteSpace:"pre-wrap"}}>{mcError}</div>
+            </div>}
           </>)}
 
           {btRunning&&(
