@@ -979,8 +979,8 @@ export default function App(){
                             const wt = combined.metrics1Y?.weights?.find(w=>w.symbol===p.symbol);
                             const riskPct = wt?.riskContribPct ?? null;
                             const totalNLV = combined.totalNetLiquidation || 1;
-                            // riskEUR = how much EUR of vol this position contributes
-                            // = (risk contrib % of portfolio vol) * portfolio vol * NAV / 100
+                            // riskPct = % of total portfolio variance from this asset
+                            // Risk EUR = riskPct% of portfolio variance × NAV (proxy for variance-weighted exposure)
                             const portVolPct = combined.metrics1Y?.annualizedVolPct || 13.5;
                             const riskEUR = riskPct !== null ? (riskPct/100) * (portVolPct/100) * totalNLV : null;
                             return(<>
@@ -988,8 +988,8 @@ export default function App(){
                               {riskPct!==null&&(
                                 <div style={{marginTop:4}}>
                                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-                                    <span style={{fontSize:9,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.05em"}}>Risk contribution</span>
-                                    <span style={{fontSize:9,color:C.red,fontFamily:C.mono}}>{riskPct.toFixed(1)}% vol · {fmtEUR(riskEUR)}</span>
+                                    <span style={{fontSize:9,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.05em"}}>% of portfolio variance</span>
+                                    <span style={{fontSize:9,color:C.red,fontFamily:C.mono}}>{riskPct.toFixed(1)}% · {fmtEUR(riskEUR)}</span>
                                   </div>
                                   <div style={{height:3,background:C.border,borderRadius:2,overflow:"hidden"}}>
                                     <div style={{width:`${Math.min(riskPct*2,100)}%`,height:"100%",background:C.red,borderRadius:2,opacity:0.7}}/>
