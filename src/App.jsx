@@ -1550,9 +1550,7 @@ export default function App(){
               try{
                 const r=await fetch(`${BACKEND}/api/backtest/run`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({instruction:`Run a Monte Carlo forward simulation using the ${mcModel} stochastic process. Horizon: 12 months (252 trading days), 1000 paths. Strategy/portfolio: ${btInput.trim()}. First run the historical backtest to get the return series, then calibrate ${mcModel} parameters from those returns (mu, sigma, and for Heston: kappa/theta/xi/rho, for jumps: lambda/mu_j/sigma_j). Simulate 1000 forward paths. Produce: fan chart with P5/P25/Median/P75/P95 bands, terminal distribution histogram, cross-path vol through time, and a stats panel. Metrics must include: expected_return_pct, vol_terminal_pct, sharpe_annualised, prob_loss_pct, prob_gain_10pct, prob_gain_25pct, var95_pct, cvar95_pct, p5_price, p50_price, p95_price.`})});
                 const d=await r.json();
-                if(!r.ok)setMcError((d.error||"Error")+(d.detail?"
-
-"+d.detail.slice(0,400):""));
+                if(!r.ok)setMcError((d.error||"Error")+(d.detail?"\n\n"+d.detail.slice(0,400):""));
                 else setMcResult(d);
               }catch(e){setMcError(e.message);}
               setMcRunning(false);
