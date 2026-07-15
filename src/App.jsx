@@ -900,7 +900,7 @@ export default function App(){
       {/* ══ CHAT ══════════════════════════════════════════════════ */}
       {tab==="chat"&&(
         <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-          <div ref={chatScrollRef} style={{flex:1,overflowY:"auto",padding:16}}>
+          <div ref={chatScrollRef} style={{flex:1,overflowY:"auto",padding:"16px 16px max(16px, env(safe-area-inset-bottom)) 16px"}}>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:16}}>
               {["Combined Portfolio Overview","Latest Market News","PnL Summary","Var & Risk report"].map(q=>(
                 <button key={q} onClick={()=>setInput(q)} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 11px",color:C.textMuted,fontSize:12,cursor:"pointer"}}>{q}</button>
@@ -932,7 +932,7 @@ export default function App(){
 
       {/* ══ PORTFOLIO ═════════════════════════════════════════════ */}
       {tab==="portfolio"&&(
-        <div style={{flex:1,overflowY:"auto",padding:16}}>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 16px max(16px, env(safe-area-inset-bottom)) 16px"}}>
           {portLoading&&<div style={{color:C.textMuted,textAlign:"center",padding:48}}>Loading…</div>}
           {portfolio&&!portLoading&&(
             <>
@@ -1083,7 +1083,7 @@ export default function App(){
 
       {/* ══ CHARTS ════════════════════════════════════════════════ */}
       {tab==="charts"&&(
-        <div style={{flex:1,overflowY:"auto",padding:16}}>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 16px max(16px, env(safe-area-inset-bottom)) 16px"}}>
           {/* Search */}
           <div style={{display:"flex",gap:8,marginBottom:14}}>
             <input value={chartInput} onChange={e=>setChartInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&loadChart(chartInput.trim())}
@@ -1205,7 +1205,7 @@ export default function App(){
 
       {/* ══ REGIME ════════════════════════════════════════════════ */}
       {tab==="regime"&&(
-        <div style={{flex:1,overflowY:"auto",padding:16}}>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 16px max(16px, env(safe-area-inset-bottom)) 16px"}}>
           <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:12}}>Market Regime · 2-State Hidden Markov Model · 5Y Training Window</div>
           {!regimeData&&!regimeLoading&&!regimeError&&(
             <button onClick={loadRegime} style={{width:"100%",background:C.goldDim,border:`1px solid ${C.gold}44`,borderRadius:12,padding:18,color:C.goldText,fontSize:15,fontWeight:700,cursor:"pointer"}}>🔴 Run HMM Regime Detection</button>
@@ -1402,7 +1402,7 @@ export default function App(){
 
       {/* ══ SCHEDULE ══════════════════════════════════════════════ */}
       {tab==="schedule"&&(
-        <div style={{flex:1,overflowY:"auto",padding:16}}>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 16px max(16px, env(safe-area-inset-bottom)) 16px"}}>
           {pushStatus==="subscribed"?(
             <div style={{background:C.surfaceHigh,border:`1px solid ${C.green}44`,borderRadius:12,padding:"11px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{fontSize:13,fontWeight:600,color:C.green}}>🔔 Notifications active</div>
@@ -1458,7 +1458,7 @@ export default function App(){
       )}
 
       {tab==="backtest"&&(
-        <div style={{flex:1,overflowY:"auto",padding:16}}>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 16px max(16px, env(safe-area-inset-bottom)) 16px"}}>
           <div style={{fontSize:13,fontWeight:700,color:C.goldText,marginBottom:4}}>🧪 Quantitative Analysis</div>
           <div style={{fontSize:12,color:C.textMuted,marginBottom:12,lineHeight:1.6}}>
             Claude writes the Python, runs it on Railway, emails results + auditable code.
@@ -1548,7 +1548,7 @@ export default function App(){
               if(!btInput.trim()||mcRunning)return;
               setMcRunning(true);setMcResult(null);setMcError(null);
               try{
-                const r=await fetch(`${BACKEND}/api/backtest/run`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({instruction:`Run a Monte Carlo forward simulation using the ${mcModel} stochastic process. Horizon: 12 months (252 trading days), 1000 paths. Strategy/portfolio: ${btInput.trim()}. First run the historical backtest to get the return series, then calibrate ${mcModel} parameters from those returns (mu, sigma, and for Heston: kappa/theta/xi/rho, for jumps: lambda/mu_j/sigma_j). Simulate 1000 forward paths. Produce: fan chart with P5/P25/Median/P75/P95 bands, terminal distribution histogram, cross-path vol through time, and a stats panel. Metrics must include: expected_return_pct, vol_terminal_pct, sharpe_annualised, prob_loss_pct, prob_gain_10pct, prob_gain_25pct, var95_pct, cvar95_pct, p5_price, p50_price, p95_price.`})});
+                const r=await fetch(`${BACKEND}/api/backtest/montecarlo`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({strategy_desc:btInput.trim(),horizon_days:252,model:mcModel})});
                 const d=await r.json();
                 if(!r.ok)setMcError((d.error||"Error")+(d.detail?"\n\n"+d.detail.slice(0,400):""));
                 else setMcResult(d);
