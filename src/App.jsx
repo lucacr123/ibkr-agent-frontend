@@ -713,6 +713,23 @@ export default function App(){
   const [runningTask,setRunningTask]=useState(null);
   const [pushStatus,setPushStatus]=useState("idle");
   const [ibkrOk,setIbkrOk]=useState(null);
+  const [notifModal,setNotifModal]=useState(null); // {title, body}
+
+  // Listen for notification clicks from service worker
+  useEffect(()=>{
+    const handler = e => {
+      if (e.data?.type==="NOTIFICATION_CLICK") {
+        setNotifModal({ title: e.data.title, body: e.data.body });
+      }
+    };
+    navigator.serviceWorker?.addEventListener("message", handler);
+    // Also check URL params (when app was closed)
+    try {
+      const p = new URLSearchParams(window.location.search).get("notif");
+      if (p) { const d=JSON.parse(decodeURIComponent(p)); setNotifModal(d); window.history.replaceState({},"","/"); }
+    } catch {}
+    return () => navigator.serviceWorker?.removeEventListener("message", handler);
+  },[]);
   // Backtest
   const [btInput,setBtInput]=useState("");
   const [btRunning,setBtRunning]=useState(false);
@@ -1623,6 +1640,21 @@ export default function App(){
       )}
 
       <style>{`input::placeholder{color:#3A4060;}textarea::placeholder{color:#3A4060;}*{-webkit-tap-highlight-color:transparent;}::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#252A38;border-radius:2px;}`}</style>
+
+      {/* Notification modal */}
+      {notifModal&&(
+        <div onClick={()=>setNotifModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:16,padding:20,maxWidth:380,width:"100%"}}>
+            <div style={{fontSize:11,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>🔔 Alert</div>
+            <div style={{fontSize:15,fontWeight:700,color:C.goldText,marginBottom:10}}>{notifModal.title}</div>
+            <div style={{fontSize:14,color:C.textPrimary,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{notifModal.body}</div>
+            <button onClick={()=>setNotifModal(null)}
+              style={{marginTop:16,width:"100%",background:C.gold,border:"none",borderRadius:10,padding:"10px 0",color:"#0D0F14",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
